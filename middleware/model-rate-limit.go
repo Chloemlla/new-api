@@ -232,8 +232,8 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 
 		// 2. 检查成功请求数限制
 		// 使用一个临时key来检查限制，这样可以避免实际记录
-		checkKey := successKey + "_check"
-		if !inMemoryRateLimiter.Request(checkKey, successMaxCount, duration) {
+		reservation, allowed := inMemoryRateLimiter.Reserve(successKey, successMaxCount, duration)
+		if !allowed {
 			writeOpenAiRateLimited(c, duration, fmt.Sprintf("您已达到请求数限制：%d分钟内最多请求%d次", setting.ModelRequestRateLimitDurationMinutes, successMaxCount))
 			return
 		}
@@ -241,9 +241,11 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		// 3. 处理请求
 		c.Next()
 
-		// 4. 如果请求成功，记录到实际的成功请求计数中
+		// 4. 只有成功请求才保留成功名额。
 		if c.Writer.Status() < 400 {
-			inMemoryRateLimiter.Request(successKey, successMaxCount, duration)
+			reservation.Commit()
+		} else {
+			reservation.Rollback()
 		}
 	}
 }
