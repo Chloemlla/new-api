@@ -219,6 +219,59 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	return nil, errors.New("channel not found")
 }
 
+// GetSatisfiedChannelPriorityCount returns the number of distinct priorities
+// available for the group and model after request-path filtering.
+func GetSatisfiedChannelPriorityCount(group string, model string, requestPath string) (int, error) {
+	if !common.MemoryCacheEnabled {
+		modelNames := []string{model}
+		normalizedModel := ratio_setting.FormatMatchingModelName(model)
+		if normalizedModel != model {
+			modelNames = append(modelNames, normalizedModel)
+		}
+		for _, modelName := range modelNames {
+			var abilities []Ability
+			if err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true).Find(&abilities).Error; err != nil {
+				return 0, err
+			}
+			abilities = filterAbilitiesByRequestPathAndModel(abilities, requestPath, model)
+			priorities := make(map[int64]struct{}, len(abilities))
+			for _, ability := range abilities {
+				if ability.Priority != nil {
+					priorities[*ability.Priority] = struct{}{}
+				}
+			}
+			if len(priorities) > 0 {
+				return len(priorities), nil
+			}
+		}
+		return 0, nil
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+
+	modelNames := []string{model}
+	normalizedModel := ratio_setting.FormatMatchingModelName(model)
+	if normalizedModel != model {
+		modelNames = append(modelNames, normalizedModel)
+	}
+	for _, modelName := range modelNames {
+		channels := filterChannelsByRequestPathAndModel(group2model2channels[group][modelName], requestPath, model)
+		priorities := make(map[int64]struct{}, len(channels))
+		for _, channelID := range channels {
+			channel, ok := channelsIDM[channelID]
+			if !ok {
+				return 0, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelID)
+			}
+			priorities[channel.GetPriority()] = struct{}{}
+		}
+		if len(priorities) > 0 {
+			return len(priorities), nil
+		}
+	}
+	return 0, nil
+}
+
 // filterChannelsByRequestPathAndModel restricts candidates by request path and
 // model. Only Advanced Custom (type 58) channels are path-checked: they are kept
 // only when one of their configured routes matches requestPath and model. All

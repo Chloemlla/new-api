@@ -64,9 +64,8 @@ func setupChannelSelectAutoGroupsTest(t *testing.T) *gorm.DB {
 	return db
 }
 
-func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, group, modelName string) {
+func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, group, modelName string, priority int64) {
 	t.Helper()
-	priority := int64(0)
 	weight := uint(100)
 	require.NoError(t, db.Create(&model.Channel{
 		Id:       id,
@@ -89,11 +88,44 @@ func createChannelSelectAutoGroupsChannel(t *testing.T, db *gorm.DB, id int, gro
 	}).Error)
 }
 
+func TestCacheGetRandomSatisfiedChannelPreservesGlobalRetryBudgetAcrossAutoGroups(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	const modelName = "auto-groups-budget-model"
+	createChannelSelectAutoGroupsChannel(t, db, 2201, "vip", modelName, 2)
+	createChannelSelectAutoGroupsChannel(t, db, 2202, "vip", modelName, 1)
+	createChannelSelectAutoGroupsChannel(t, db, 2203, "default", modelName, 2)
+	createChannelSelectAutoGroupsChannel(t, db, 2204, "default", modelName, 1)
+	model.InitChannelCache()
+
+	common.RetryTimes = 3
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+	common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip", "default"})
+	common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, true)
+
+	retry := 0
+	param := &RetryParam{Ctx: ctx, TokenGroup: "auto", ModelName: modelName, RequestPath: "/v1/chat/completions", Retry: &retry}
+	wantGroups := []string{"vip", "vip", "default", "default"}
+	wantChannels := []int{2201, 2202, 2203, 2204}
+	for i := range wantGroups {
+		channel, group, err := CacheGetRandomSatisfiedChannel(param)
+		require.NoError(t, err)
+		require.NotNil(t, channel)
+		assert.Equal(t, wantGroups[i], group)
+		assert.Equal(t, wantChannels[i], channel.Id)
+		assert.Equal(t, i, param.GetRetry())
+		if i < len(wantGroups)-1 {
+			param.IncreaseRetry()
+		}
+	}
+}
+
 func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(t *testing.T) {
 	db := setupChannelSelectAutoGroupsTest(t)
 	const modelName = "auto-groups-runtime-model"
-	createChannelSelectAutoGroupsChannel(t, db, 2101, "vip", modelName)
-	createChannelSelectAutoGroupsChannel(t, db, 2102, "default", modelName)
+	createChannelSelectAutoGroupsChannel(t, db, 2101, "vip", modelName, 0)
+	createChannelSelectAutoGroupsChannel(t, db, 2102, "default", modelName, 0)
 	model.InitChannelCache()
 
 	gin.SetMode(gin.TestMode)
