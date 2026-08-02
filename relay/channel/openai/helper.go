@@ -107,12 +107,15 @@ func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, res
 	return nil
 }
 
-func processTokenData(relayMode int, data string, responseTextBuilder *strings.Builder, toolCount *int) error {
+func processTokenData(relayMode int, data string, responseTextBuilder *strings.Builder, toolCount *int, seenStreamToolCalls map[string]struct{}, streamFunctionCallNames *[]string) error {
 	switch relayMode {
 	case relayconstant.RelayModeChatCompletions:
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			return err
+		}
+		if seenStreamToolCalls != nil && streamFunctionCallNames != nil {
+			collectStreamFunctionCallNamesFromResponse(streamResponse, seenStreamToolCalls, streamFunctionCallNames)
 		}
 		return ProcessStreamResponse(streamResponse, responseTextBuilder, toolCount)
 	case relayconstant.RelayModeCompletions:

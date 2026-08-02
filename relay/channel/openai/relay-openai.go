@@ -139,8 +139,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 
 			lastStreamData = data
-			collectStreamFunctionCallNames(data, seenStreamToolCalls, &streamFunctionCallNames)
-			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
+			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount, seenStreamToolCalls, &streamFunctionCallNames); err != nil {
 				logger.LogError(c, "error processing stream token data: "+err.Error())
 				sr.Error(err)
 			}
@@ -199,6 +198,10 @@ func collectStreamFunctionCallNames(data string, seen map[string]struct{}, names
 	if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 		return
 	}
+	collectStreamFunctionCallNamesFromResponse(streamResponse, seen, names)
+}
+
+func collectStreamFunctionCallNamesFromResponse(streamResponse dto.ChatCompletionsStreamResponse, seen map[string]struct{}, names *[]string) {
 	for _, choice := range streamResponse.Choices {
 		for i, tc := range choice.Delta.ToolCalls {
 			name := tc.Function.Name

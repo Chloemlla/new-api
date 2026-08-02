@@ -228,21 +228,32 @@ func filterChannelsByRequestPathAndModel(channels []int, requestPath string, mod
 	if requestPath == "" || len(channels) == 0 {
 		return channels
 	}
-	filtered := make([]int, 0, len(channels))
-	for _, channelId := range channels {
+	var filtered []int
+	for i, channelId := range channels {
 		channel, ok := channelsIDM[channelId]
 		if !ok {
 			// keep it so the downstream consistency error is raised as before
-			filtered = append(filtered, channelId)
+			if filtered != nil {
+				filtered = append(filtered, channelId)
+			}
 			continue
 		}
 		if channel.Type != constant.ChannelTypeAdvancedCustom {
-			filtered = append(filtered, channelId)
+			if filtered != nil {
+				filtered = append(filtered, channelId)
+			}
 			continue
+		}
+		if filtered == nil {
+			filtered = make([]int, 0, len(channels))
+			filtered = append(filtered, channels[:i]...)
 		}
 		if config := channel2advancedCustomConfig[channelId]; config != nil && config.SupportsPathForModel(requestPath, model) {
 			filtered = append(filtered, channelId)
 		}
+	}
+	if filtered == nil {
+		return channels
 	}
 	return filtered
 }
@@ -300,6 +311,37 @@ func CacheUpdateChannelStatus(id int, status int) {
 					}
 				}
 			}
+		}
+		return
+	}
+
+	channel, ok := channelsIDM[id]
+	if !ok {
+		return
+	}
+	for _, group := range strings.Split(channel.Group, ",") {
+		model2channels, ok := group2model2channels[group]
+		if !ok {
+			model2channels = make(map[string][]int)
+			group2model2channels[group] = model2channels
+		}
+		for _, modelName := range strings.Split(channel.Models, ",") {
+			channels := model2channels[modelName]
+			present := false
+			for _, channelId := range channels {
+				if channelId == id {
+					present = true
+					break
+				}
+			}
+			if present {
+				continue
+			}
+			channels = append(channels, id)
+			sort.SliceStable(channels, func(i, j int) bool {
+				return channelsIDM[channels[i]].GetPriority() > channelsIDM[channels[j]].GetPriority()
+			})
+			model2channels[modelName] = channels
 		}
 	}
 }
