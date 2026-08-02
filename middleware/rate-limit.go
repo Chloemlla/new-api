@@ -132,16 +132,27 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 	}
 }
 
+func setRetryAfter(c *gin.Context, retryAfterSeconds int64) {
+	if retryAfterSeconds > 0 {
+		c.Header("Retry-After", strconv.FormatInt(retryAfterSeconds, 10))
+	}
+}
+
 // writeRateLimited rejects the request with 429 and a Retry-After hint so
 // clients can back off instead of treating the rejection as a fatal error.
 // The in-memory limiter cannot report the remaining window, so callers
 // without a TTL pass the full window duration as a conservative upper bound.
 func writeRateLimited(c *gin.Context, retryAfterSeconds int64) {
-	if retryAfterSeconds > 0 {
-		c.Header("Retry-After", strconv.FormatInt(retryAfterSeconds, 10))
-	}
+	setRetryAfter(c, retryAfterSeconds)
 	c.Status(http.StatusTooManyRequests)
 	c.Abort()
+}
+
+// writeOpenAiRateLimited writes a model/API-compatible rate-limit response
+// while preserving the Retry-After behavior used by the generic limiters.
+func writeOpenAiRateLimited(c *gin.Context, retryAfterSeconds int64, message string) {
+	setRetryAfter(c, retryAfterSeconds)
+	abortWithOpenAiMessage(c, http.StatusTooManyRequests, message)
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
