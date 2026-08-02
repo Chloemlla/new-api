@@ -108,7 +108,7 @@ export function RateLimitDialog({
         isEditMode ? t('Edit group rate limit') : t('Add group rate limit')
       }
       description={t(
-        'Configure rate limiting rules for a specific user group.'
+        "Limits apply per authenticated user based on the user's persisted group."
       )}
       contentClassName='sm:max-w-[500px]'
       contentHeight='auto'
@@ -181,7 +181,9 @@ export function RateLimitDialog({
                   </div>
                 </FormControl>
                 <FormDescription>
-                  {t('Total requests allowed per period. 0 = unlimited.')}
+                  {t(
+                    'Total requests allowed in the window, including failures. 0 = unlimited.'
+                  )}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -212,7 +214,9 @@ export function RateLimitDialog({
                   </div>
                 </FormControl>
                 <FormDescription>
-                  {t('Only successful requests count toward this limit.')}
+                  {t(
+                    'Successful requests are an additional cap; failed requests do not count toward it.'
+                  )}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

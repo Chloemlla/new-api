@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
 import { JsonCodeEditor } from '@/components/json-code-editor'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -116,6 +117,25 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
 
   return (
     <SettingsSection title={t('Rate Limiting')}>
+      <Alert>
+        <AlertDescription className='space-y-1 text-sm'>
+          <p>
+            {t(
+              "Model request limits are enforced per authenticated user. The user's persisted user group selects the group entry; limits are not shared across group members."
+            )}
+          </p>
+          <p>
+            {t(
+              'For RPM (requests per minute), set the limit period to 1 minute. Global and group counters use the same window.'
+            )}
+          </p>
+          <p>
+            {t(
+              'Without Redis, rate-limit counters are process-local and are not coordinated across multiple app instances. Use Redis for shared counters in multi-instance deployments.'
+            )}
+          </p>
+        </AlertDescription>
+      </Alert>
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
           <SettingsPageFormActions
@@ -152,7 +172,7 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
               name='ModelRequestRateLimitDurationMinutes'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('Limit period')}</FormLabel>
+                  <FormLabel>{t('Limit period (minutes)')}</FormLabel>
                   <FormControl>
                     <div className='flex items-center gap-2'>
                       <Input
@@ -170,7 +190,9 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    {t('Time window for rate limiting')}
+                    {t(
+                      'For RPM (requests per minute), set this to 1. Global and group counters use the same window.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -201,7 +223,9 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    {t('Including failed requests, 0 = unlimited')}
+                    {t(
+                      'Total requests in the window, including failures. 0 = unlimited.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -232,7 +256,9 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     </div>
                   </FormControl>
                   <FormDescription>
-                    {t('Only successful requests')}
+                    {t(
+                      'Successful requests are an additional cap; failed requests do not count toward it.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -286,6 +312,20 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                     />
                   )}
                 </FormControl>
+                <FormDescription>
+                  <span className='block space-y-1'>
+                    <span className='block'>
+                      {t(
+                        'Group entries use [total requests, successful requests]. Total includes failures; successful requests are an additional cap.'
+                      )}
+                    </span>
+                    <span className='block'>
+                      {t(
+                        'A group entry overrides the global request and success limits for users in that group.'
+                      )}
+                    </span>
+                  </span>
+                </FormDescription>
                 {!useVisualEditor && (
                   <FormDescription>
                     <div className='space-y-1 text-xs'>
@@ -302,11 +342,6 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                         <li>
                           {t(
                             'maxRequests ≥ 0, maxSuccess ≥ 1, both ≤ 2,147,483,647'
-                          )}
-                        </li>
-                        <li>
-                          {t(
-                            'Group config overrides global limits, shares the same period'
                           )}
                         </li>
                       </ul>
