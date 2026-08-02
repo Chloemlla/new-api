@@ -68,3 +68,20 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 	}
 	return true
 }
+
+// Cancel removes one previously admitted request from the in-memory window.
+// It is used when a request reserved a successful-request slot but the
+// downstream handler later returned an error.
+func (l *InMemoryRateLimiter) Cancel(key string) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	queue, ok := l.store[key]
+	if !ok || len(*queue) == 0 {
+		return
+	}
+	*queue = (*queue)[:len(*queue)-1]
+	if len(*queue) == 0 {
+		delete(l.store, key)
+	}
+}

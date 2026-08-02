@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 )
 
 const (
@@ -21,6 +22,88 @@ const (
 	ModelRequestRateLimitSuccessCountMark = "MRRLS"
 	modelRateLimitTimeFormat              = "2006-01-02T15:04:05.000Z"
 )
+
+const redisModelRateLimitReserveScript = `
+local key = KEYS[1]
+local maxCount = tonumber(ARGV[1])
+local duration = tonumber(ARGV[2])
+local token = ARGV[3]
+local nowReply = redis.call('TIME')
+local now = tonumber(nowReply[1])
+local length = redis.call('LLEN', key)
+if length >= maxCount then
+  local oldest = redis.call('LINDEX', key, -1)
+  local separator = string.find(oldest, '|', 1, true)
+  local oldestTime
+  if separator then
+    oldestTime = tonumber(string.sub(oldest, separator + 1))
+  else
+    oldestTime = tonumber(oldest)
+  end
+  if oldestTime then
+    if now - oldestTime < duration then
+      local ttl = redis.call('TTL', key)
+      if ttl < 0 then redis.call('EXPIRE', key, duration) end
+      return 0
+    end
+  elseif redis.call('TTL', key) > 0 then
+    return 0
+  end
+end
+redis.call('LPUSH', key, token .. '|' .. now)
+redis.call('LTRIM', key, 0, maxCount - 1)
+redis.call('EXPIRE', key, duration)
+return 1
+`
+
+const redisModelRateLimitReleaseScript = `
+local key = KEYS[1]
+local prefix = ARGV[1] .. '|'
+local entries = redis.call('LRANGE', key, 0, -1)
+for _, entry in ipairs(entries) do
+  if string.sub(entry, 1, string.len(prefix)) == prefix then
+    local removed = redis.call('LREM', key, 1, entry)
+    if removed > 0 and redis.call('LLEN', key) == 0 then redis.call('DEL', key) end
+    return removed
+  end
+end
+return 0
+`
+
+func reserveRedisRateLimit(ctx context.Context, rdb *redis.Client, key string, maxCount int, duration int64) (bool, string, error) {
+	if maxCount == 0 {
+		return true, "", nil
+	}
+	if maxCount < 0 {
+		return false, "", fmt.Errorf("rate limit maximum must not be negative")
+	}
+	if duration <= 0 {
+		return false, "", fmt.Errorf("rate limit duration must be positive")
+	}
+	if rdb == nil {
+		return false, "", fmt.Errorf("Redis client is not initialized")
+	}
+	token := uuid.NewString()
+	result, err := rdb.Eval(ctx, redisModelRateLimitReserveScript, []string{key}, maxCount, duration, token).Int()
+	if err != nil {
+		return false, "", err
+	}
+	if result != 1 {
+		return false, "", nil
+	}
+	return true, token, nil
+}
+
+func releaseRedisRateLimit(ctx context.Context, rdb *redis.Client, key, token string) error {
+	if token == "" {
+		return nil
+	}
+	if rdb == nil {
+		return fmt.Errorf("Redis client is not initialized")
+	}
+	_, err := rdb.Eval(ctx, redisModelRateLimitReleaseScript, []string{key}, token).Int()
+	return err
+}
 
 // 检查Redis中的请求限制
 func checkRedisRateLimit(ctx context.Context, rdb *redis.Client, key string, maxCount int, duration int64) (bool, error) {
@@ -84,7 +167,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 
 		// 1. 检查成功请求数限制
 		successKey := fmt.Sprintf("rateLimit:%s:%s", ModelRequestRateLimitSuccessCountMark, userId)
-		allowed, err := checkRedisRateLimit(ctx, rdb, successKey, successMaxCount, duration)
+		allowed, reservationToken, err := reserveRedisRateLimit(ctx, rdb, successKey, successMaxCount, duration)
 		if err != nil {
 			fmt.Println("检查成功请求数限制失败:", err.Error())
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
@@ -109,12 +192,14 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			)
 
 			if err != nil {
+				_ = releaseRedisRateLimit(ctx, rdb, successKey, reservationToken)
 				fmt.Println("检查总请求数限制失败:", err.Error())
 				abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
 				return
 			}
 
 			if !allowed {
+				_ = releaseRedisRateLimit(ctx, rdb, successKey, reservationToken)
 				writeOpenAiRateLimited(c, duration, fmt.Sprintf("您已达到总请求数限制：%d分钟内最多请求%d次，包括失败次数，请检查您的请求是否正确", setting.ModelRequestRateLimitDurationMinutes, totalMaxCount))
 				return
 			}
@@ -123,14 +208,14 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 		// 4. 处理请求
 		c.Next()
 
-		// 5. 如果请求成功，记录成功请求
-		if c.Writer.Status() < 400 {
-			recordRedisRequest(ctx, rdb, successKey, successMaxCount)
+		// 5. 失败请求释放成功名额
+		if c.Writer.Status() >= 400 {
+			if err := releaseRedisRateLimit(ctx, rdb, successKey, reservationToken); err != nil {
+				fmt.Println("释放成功请求数限制失败:", err.Error())
+			}
 		}
 	}
 }
-
-// 内存限流处理器
 func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) gin.HandlerFunc {
 	inMemoryRateLimiter.Init(time.Duration(setting.ModelRequestRateLimitDurationMinutes) * time.Minute)
 
@@ -178,10 +263,7 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 		successMaxCount := setting.ModelRequestRateLimitSuccessCount
 
 		// 获取分组
-		group := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
-		if group == "" {
-			group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-		}
+		group := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 
 		//获取分组的限流配置
 		groupTotalCount, groupSuccessCount, found := setting.GetGroupRateLimit(group)
