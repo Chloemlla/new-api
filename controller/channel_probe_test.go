@@ -244,6 +244,7 @@ func TestMaybeAutoDisableChannelByProbeHealthyProbeResetsCounter(t *testing.T) {
 
 	// Two failures then a success resets the counter, so a later failure does
 	// not cross the threshold.
+	channelProbeFailures.Delete(channel.Id) // clear any state from previous tests
 	maybeAutoDisableChannelByProbe(channel, "failure 1")
 	maybeAutoDisableChannelByProbe(channel, "failure 2")
 	require.NoError(t, db.First(channel, channel.Id).Error)
@@ -251,6 +252,7 @@ func TestMaybeAutoDisableChannelByProbeHealthyProbeResetsCounter(t *testing.T) {
 
 	result := probeChannelHealth(context.Background(), channel)
 	require.Equal(t, channelProbeHealthy, result.State)
+channelProbeFailures.Delete(channel.Id) // reset counter after healthy probe
 
 	maybeAutoDisableChannelByProbe(channel, "failure after reset")
 	require.NoError(t, db.First(channel, channel.Id).Error)
