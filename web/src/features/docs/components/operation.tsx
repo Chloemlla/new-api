@@ -183,7 +183,7 @@ export function Operation({ spec, path, method, operation }: OperationProps) {
         {parameters.length > 0 && (
           <div className='space-y-2'>
             <SectionTitle>{t('Parameters')}</SectionTitle>
-            <ParameterList spec={spec} parameters={parameters} />
+            <ParameterList parameters={parameters} />
           </div>
         )}
 

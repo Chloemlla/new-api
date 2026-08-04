@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import type { SystemInstance } from "./types"
 
 export interface DashboardHealthData {
   system: {
@@ -75,13 +76,7 @@ export async function reloadConfig(): Promise<void> {
 export interface SystemInstanceListResponse {
   success: boolean
   message: string
-  data?: Array<{
-    node_name: string
-    status: string
-    stale_after_seconds: number
-    started_at: number
-    last_seen_at: number
-  }>
+  data?: SystemInstance[]
 }
 
 export interface SystemInstanceDeleteResponse {
