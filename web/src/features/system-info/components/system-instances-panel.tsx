@@ -511,7 +511,7 @@ export function SystemInstancesPanel() {
 
   const instances = instancesQuery.data ?? []
   const staleInstances = instances.filter(
-    (instance) => instance.status === 'stale'
+    (instance: SystemInstance) => instance.status === 'stale'
   )
   const hasStaleInstances = staleInstances.length > 0
   const loading = instancesQuery.isLoading

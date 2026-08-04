@@ -61,10 +61,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function ParameterList({
-  spec,
   parameters,
 }: {
-  spec: OpenAPISpec
   parameters: OpenAPIParameter[]
 }) {
   const { t } = useTranslation()

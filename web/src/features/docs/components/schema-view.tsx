@@ -230,7 +230,6 @@ export function SchemaView({
               </span>
               <span className='text-muted-foreground font-mono text-[11px]'>
                 {schemaTypeName(
-                  spec,
                   typeof schema.additionalProperties === 'object'
                     ? schema.additionalProperties
                     : undefined

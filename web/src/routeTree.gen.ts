@@ -40,6 +40,9 @@ import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedGroupsIndexRouteImport } from './routes/_authenticated/groups/index'
+import { Route as DocsIndexRouteImport } from './routes/docs/index'
+import { Route as AuthenticatedAlertRulesIndexRouteImport } from './routes/_authenticated/alert-rules/index'
+import { Route as AuthenticatedChannelsAnalyticsRouteImport } from './routes/_authenticated/channels/analytics'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
@@ -223,6 +226,23 @@ const AuthenticatedErrorsErrorRoute =
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedGroupsIndexRoute =
+nconst DocsIndexRoute = DocsIndexRouteImport.update({
+  id: "/docs/",
+  path: "/docs/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+
+const AuthenticatedAlertRulesIndexRoute = AuthenticatedAlertRulesIndexRouteImport.update({
+  id: "/alert-rules/",
+  path: "/alert-rules",
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+
+const AuthenticatedChannelsAnalyticsRoute = AuthenticatedChannelsAnalyticsRouteImport.update({
+  id: "/channels/analytics",
+  path: "/channels/analytics",
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
   AuthenticatedGroupsIndexRouteImport.update({
     id: '/groups/',
     path: '/groups/',
@@ -417,6 +437,7 @@ export interface FileRoutesByFullPath {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
+t'/docs/': typeof DocsIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -424,7 +445,9 @@ export interface FileRoutesByFullPath {
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
+t'/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
+t'/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
   '/groups/': typeof AuthenticatedGroupsIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
@@ -771,6 +794,7 @@ export interface RootRouteChildren {
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
   PricingModelIdIndexRoute: typeof PricingModelIdIndexRoute
+tDocsIndexRoute: typeof DocsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1294,6 +1318,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+tAuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
+	AuthenticatedChannelsAnalyticsRoute: typeof AuthenticatedChannelsAnalyticsRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
 }
 
@@ -1315,6 +1341,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
+tAuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
+	AuthenticatedChannelsAnalyticsRoute: AuthenticatedChannelsAnalyticsRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
@@ -1338,6 +1366,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors503Route: errors503Route,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
+tDocsIndexRoute: DocsIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,

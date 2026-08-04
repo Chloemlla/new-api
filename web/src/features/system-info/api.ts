@@ -72,3 +72,42 @@ export async function getInFlight(): Promise<Record<number, number>> {
 export async function reloadConfig(): Promise<void> {
   await api.post('/api/option/reload')
 }
+nexport interface SystemInstanceListResponse {
+  success: boolean
+  message: string
+  data?: Array<{
+    node_name: string
+    status: string
+    stale_after_seconds: number
+    started_at: number
+    last_seen_at: number
+  }>
+}
+
+export interface SystemInstanceDeleteResponse {
+  success: boolean
+  message: string
+  data?: { deleted_count: number }
+}
+
+export async function listSystemInstances(): Promise<SystemInstanceListResponse> {
+  const res = await api.get<SystemInstanceListResponse>(
+    "/api/performance/system-instances"
+  )
+  return res.data
+}
+
+export async function deleteStaleSystemInstance(nodeName: string): Promise<SystemInstanceDeleteResponse> {
+  const res = await api.post<SystemInstanceDeleteResponse>(
+    "/api/performance/system-instances/delete",
+    { node_name: nodeName }
+  )
+  return res.data
+}
+
+export async function deleteStaleSystemInstances(): Promise<SystemInstanceDeleteResponse> {
+  const res = await api.post<SystemInstanceDeleteResponse>(
+    "/api/performance/system-instances/delete-stale"
+  )
+  return res.data
+}

@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { Activity, AlertTriangle, Cpu, Database, Gauge, Server, Shield, Zap } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -61,7 +60,6 @@ function ProgressBar({ value, max = 100, label }: { value: number; max?: number;
 }
 
 export function PerformanceDashboardPanel() {
-  const { t } = useTranslation()
 
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ['dashboard-health'],
