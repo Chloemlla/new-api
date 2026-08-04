@@ -160,7 +160,7 @@ describe('API key group table cell', () => {
 
     assert.equal(
       container.querySelectorAll('[data-auto-group-frame]').length,
-      0
+      1
     )
     assert.equal(
       container.querySelectorAll('[data-auto-group-flow-border]').length,
@@ -182,7 +182,7 @@ describe('API key group table cell', () => {
 
     assert.equal(
       container.querySelectorAll('[data-auto-group-frame]').length,
-      0
+      1
     )
     assert.equal(
       container.querySelectorAll('[data-auto-group-flow-border]').length,
