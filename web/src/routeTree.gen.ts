@@ -226,28 +226,29 @@ const AuthenticatedErrorsErrorRoute =
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedGroupsIndexRoute =
-const DocsIndexRoute = DocsIndexRouteImport.update({
-  id: "/docs/",
-  path: "/docs/",
-  getParentRoute: () => rootRouteImport,
-} as any)
-
-const AuthenticatedAlertRulesIndexRoute = AuthenticatedAlertRulesIndexRouteImport.update({
-  id: "/alert-rules/",
-  path: "/alert-rules",
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-
-const AuthenticatedChannelsAnalyticsRoute = AuthenticatedChannelsAnalyticsRouteImport.update({
-  id: "/channels/analytics",
-  path: "/channels/analytics",
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
   AuthenticatedGroupsIndexRouteImport.update({
     id: '/groups/',
     path: '/groups/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+
+const AuthenticatedAlertRulesIndexRoute = AuthenticatedAlertRulesIndexRouteImport.update({
+  id: '/alert-rules/',
+  path: '/alert-rules',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+
+const AuthenticatedChannelsAnalyticsRoute = AuthenticatedChannelsAnalyticsRouteImport.update({
+  id: '/channels/analytics',
+  path: '/channels/analytics',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
   id: '/keys/',
   path: '/keys/',
@@ -437,7 +438,7 @@ export interface FileRoutesByFullPath {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
-'/docs/': typeof DocsIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -445,10 +446,10 @@ export interface FileRoutesByFullPath {
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
-'/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
-'/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
   '/groups/': typeof AuthenticatedGroupsIndexRoute
+  '/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
+  '/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -560,6 +561,7 @@ export interface FileRoutesById {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -569,6 +571,8 @@ export interface FileRoutesById {
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/groups/': typeof AuthenticatedGroupsIndexRoute
+  '/_authenticated/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
+  '/_authenticated/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -621,6 +625,7 @@ export interface FileRouteTypes {
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
+    | '/docs/'
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
@@ -630,6 +635,8 @@ export interface FileRouteTypes {
     | '/channels/'
     | '/dashboard/'
     | '/groups/'
+    | '/alert-rules/'
+    | '/channels/analytics'
     | '/keys/'
     | '/models/'
     | '/playground/'
@@ -679,6 +686,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/rankings'
     | '/setup'
+    | '/docs'
     | '/user/reset'
     | '/chat/$chatId'
     | '/dashboard/$section'
@@ -688,6 +696,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/dashboard'
     | '/groups'
+    | '/alert-rules'
     | '/keys'
     | '/models'
     | '/playground'
@@ -740,6 +749,7 @@ export interface FileRouteTypes {
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
+    | '/docs/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
     | '/_authenticated/dashboard/$section'
@@ -749,6 +759,8 @@ export interface FileRouteTypes {
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/groups/'
+    | '/_authenticated/alert-rules/'
+    | '/_authenticated/channels/analytics'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/playground/'
@@ -794,7 +806,7 @@ export interface RootRouteChildren {
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
   PricingModelIdIndexRoute: typeof PricingModelIdIndexRoute
-DocsIndexRoute: typeof DocsIndexRoute
+  DocsIndexRoute: typeof DocsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -967,6 +979,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SetupIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/(auth)/user/reset': {
       id: '/(auth)/user/reset'
       path: '/user/reset'
@@ -1014,6 +1033,20 @@ declare module '@tanstack/react-router' {
       path: '/groups'
       fullPath: '/groups/'
       preLoaderRoute: typeof AuthenticatedGroupsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/alert-rules/': {
+      id: '/_authenticated/alert-rules/'
+      path: '/alert-rules'
+      fullPath: '/alert-rules/'
+      preLoaderRoute: typeof AuthenticatedAlertRulesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/channels/analytics': {
+      id: '/_authenticated/channels/analytics'
+      path: '/channels/analytics'
+      fullPath: '/channels/analytics'
+      preLoaderRoute: typeof AuthenticatedChannelsAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/keys/': {
@@ -1318,9 +1351,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
-AuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
-	AuthenticatedChannelsAnalyticsRoute: typeof AuthenticatedChannelsAnalyticsRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
+  AuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
+  AuthenticatedChannelsAnalyticsRoute: typeof AuthenticatedChannelsAnalyticsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1341,13 +1374,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
-AuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
-	AuthenticatedChannelsAnalyticsRoute: AuthenticatedChannelsAnalyticsRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWalletIndexRoute: AuthenticatedWalletIndexRoute,
+  AuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
+  AuthenticatedChannelsAnalyticsRoute: AuthenticatedChannelsAnalyticsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -1366,11 +1399,11 @@ const rootRouteChildren: RootRouteChildren = {
   errors503Route: errors503Route,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
-DocsIndexRoute: DocsIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,
   PricingModelIdIndexRoute: PricingModelIdIndexRoute,
+  DocsIndexRoute: DocsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
