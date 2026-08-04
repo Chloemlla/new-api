@@ -516,50 +516,178 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		assignDisplayLogIds(logs, startIdx)
 	}
 
-	channelIds := types.NewSet[int]()
-	for _, log := range logs {
-		if log.ChannelId != 0 {
-			channelIds.Add(log.ChannelId)
-		}
-	}
-
-	if channelIds.Len() > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
-		}
-		if common.MemoryCacheEnabled {
-			// Cache get channel
-			for _, channelId := range channelIds.Items() {
-				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
-					channels = append(channels, struct {
-						Id   int    `gorm:"column:id"`
-						Name string `gorm:"column:name"`
-					}{
-						Id:   channelId,
-						Name: cacheChannel.Name,
-					})
-				}
-			}
-		} else {
-			// Bulk query channels from DB
-			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-				return logs, total, err
-			}
-		}
-		channelMap := make(map[int]string, len(channels))
-		for _, channel := range channels {
-			channelMap[channel.Id] = channel.Name
-		}
-		for i := range logs {
-			logs[i].ChannelName = channelMap[logs[i].ChannelId]
-		}
+	if err = enrichLogChannelNames(logs); err != nil {
+		return logs, total, err
 	}
 
 	return logs, total, err
 }
 
 const logSearchCountLimit = 10000
+
+// logExportLimit caps how many log rows a single export request may return.
+// The export writer signals truncation to the caller when the matching rows
+// exceed this bound so the frontend can warn the user to narrow the range.
+var logExportLimit = 100000
+
+// LogListFilter captures the filter dimensions shared by the log list and
+// log export queries. Export handlers build one from query params; the model
+// layer applies it against the log store.
+type LogListFilter struct {
+	LogType           int
+	StartTimestamp    int64
+	EndTimestamp      int64
+	ModelName         string
+	Username          string
+	TokenName         string
+	Channel           int
+	Group             string
+	RequestId         string
+	UpstreamRequestId string
+}
+
+func applyLogQueryFilters(tx *gorm.DB, f LogListFilter) (*gorm.DB, error) {
+	if f.LogType != LogTypeUnknown {
+		tx = tx.Where("logs.type = ?", f.LogType)
+	}
+	var err error
+	if tx, err = applyExplicitLogTextFilter(tx, "logs.model_name", f.ModelName); err != nil {
+		return nil, err
+	}
+	if f.Username != "" {
+		if tx, err = applyExplicitLogTextFilter(tx, "logs.username", f.Username); err != nil {
+			return nil, err
+		}
+	}
+	if f.TokenName != "" {
+		tx = tx.Where("logs.token_name = ?", f.TokenName)
+	}
+	if f.RequestId != "" {
+		tx = tx.Where("logs.request_id = ?", f.RequestId)
+	}
+	if f.UpstreamRequestId != "" {
+		tx = tx.Where("logs.upstream_request_id = ?", f.UpstreamRequestId)
+	}
+	if f.StartTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", f.StartTimestamp)
+	}
+	if f.EndTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", f.EndTimestamp)
+	}
+	if f.Channel != 0 {
+		tx = tx.Where("logs.channel_id = ?", f.Channel)
+	}
+	if f.Group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", f.Group)
+	}
+	return tx, nil
+}
+
+// enrichLogChannelNames fills in the channel_name field for a set of logs by
+// resolving their channel ids from the memory cache or the channels table.
+func enrichLogChannelNames(logs []*Log) error {
+	channelIds := types.NewSet[int]()
+	for _, log := range logs {
+		if log.ChannelId != 0 {
+			channelIds.Add(log.ChannelId)
+		}
+	}
+	if channelIds.Len() == 0 {
+		return nil
+	}
+
+	var channels []struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if common.MemoryCacheEnabled {
+		// Cache get channel
+		for _, channelId := range channelIds.Items() {
+			if cacheChannel, err := CacheGetChannel(channelId); err == nil {
+				channels = append(channels, struct {
+					Id   int    `gorm:"column:id"`
+					Name string `gorm:"column:name"`
+				}{
+					Id:   channelId,
+					Name: cacheChannel.Name,
+				})
+			}
+		}
+	} else {
+		// Bulk query channels from DB
+		if err := DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
+			return err
+		}
+	}
+	channelMap := make(map[int]string, len(channels))
+	for _, channel := range channels {
+		channelMap[channel.Id] = channel.Name
+	}
+	for i := range logs {
+		logs[i].ChannelName = channelMap[logs[i].ChannelId]
+	}
+	return nil
+}
+
+func GetAllLogsForExport(f LogListFilter) (logs []*Log, truncated bool, err error) {
+	var tx *gorm.DB
+	tx = LOG_DB.Model(&Log{})
+	if tx, err = applyLogQueryFilters(tx, f); err != nil {
+		return nil, false, err
+	}
+	var total int64
+	if err = tx.Count(&total).Error; err != nil {
+		return nil, false, err
+	}
+	truncated = total > int64(logExportLimit)
+
+	order := "logs.created_at desc, logs.id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("logs.")
+	}
+	if err = tx.Order(order).Limit(logExportLimit).Find(&logs).Error; err != nil {
+		return nil, false, err
+	}
+	if err = enrichLogChannelNames(logs); err != nil {
+		return nil, false, err
+	}
+	return logs, truncated, nil
+}
+
+func GetUserLogsForExport(userId int, f LogListFilter) (logs []*Log, truncated bool, err error) {
+	var tx *gorm.DB
+	tx = LOG_DB.Model(&Log{}).Where("logs.user_id = ?", userId)
+	if tx, err = applyLogQueryFilters(tx, f); err != nil {
+		return nil, false, err
+	}
+	var total int64
+	if err = tx.Count(&total).Error; err != nil {
+		return nil, false, err
+	}
+	truncated = total > int64(logExportLimit)
+
+	order := "logs.created_at desc, logs.id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("logs.")
+	}
+	if err = tx.Order(order).Limit(logExportLimit).Find(&logs).Error; err != nil {
+		return nil, false, err
+	}
+	// Strip admin-only fields from the raw JSON payload before handing the
+	// records to the export writer, mirroring what the user-facing list view
+	// does via formatUserLogs without rewriting display ids or dropping the
+	// channel name.
+	for i := range logs {
+		var otherMap map[string]interface{}
+		otherMap, _ = common.StrToMap(logs[i].Other)
+		if otherMap != nil {
+			delete(otherMap, "admin_info")
+			delete(otherMap, "audit_info")
+		}
+		logs[i].Other = common.MapToJsonStr(otherMap)
+	}
+	return logs, truncated, nil
+}
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB

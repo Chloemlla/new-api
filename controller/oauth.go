@@ -213,6 +213,10 @@ func HandleOAuth(c *gin.Context) {
 	}
 
 	// 8. Check user status
+	if user.Status == common.UserStatusPending {
+		common.ApiErrorI18n(c, i18n.MsgUserPendingApproval)
+		return
+	}
 	if user.Status != common.UserStatusEnabled {
 		common.ApiErrorI18n(c, i18n.MsgOAuthUserBanned)
 		return
@@ -364,7 +368,12 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		}
 	}
 	user.Role = common.RoleCommonUser
-	user.Status = common.UserStatusEnabled
+	if common.UserRegistrationApprovalEnabled {
+		// 开启注册审核时，OAuth 新注册用户同样进入待审核状态。
+		user.Status = common.UserStatusPending
+	} else {
+		user.Status = common.UserStatusEnabled
+	}
 
 	// Handle affiliate code
 	inviterId := 0

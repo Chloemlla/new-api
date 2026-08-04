@@ -29,6 +29,8 @@ const ACTION_MESSAGES: Record<ManageUserAction, string> = {
   demote: 'User demoted to regular user successfully',
   delete: 'User deleted successfully',
   add_quota: 'Quota adjusted successfully',
+  approve: 'Registration approved successfully',
+  reject: 'Registration rejected successfully',
 }
 
 /**

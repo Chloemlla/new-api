@@ -106,6 +106,10 @@ export function SignUpForm({
     status?.oauth_register_enabled ??
     status?.data?.oauth_register_enabled ??
     true
+  const registrationRequiresApproval =
+    status?.user_registration_approval ??
+    status?.data?.user_registration_approval ??
+    false
   const hasWeChatLogin = Boolean(status?.wechat_login)
   const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
 
@@ -170,7 +174,15 @@ export function SignUpForm({
       })
 
       if (res?.success) {
-        toast.success(t('Account created! Please sign in'))
+        if (registrationRequiresApproval) {
+          toast.success(
+            t(
+              'Account created. Your account requires administrator approval before you can sign in.'
+            )
+          )
+        } else {
+          toast.success(t('Account created! Please sign in'))
+        }
         redirectToLogin()
       } else {
         toast.error(res?.message || t('Failed to create account'))
@@ -363,6 +375,14 @@ export function SignUpForm({
           onCheckedChange={setAgreedToLegal}
           className='mt-1'
         />
+
+        {registrationRequiresApproval && (
+          <p className='text-muted-foreground bg-muted/50 rounded-md px-3 py-2 text-xs'>
+            {t(
+              'Your account will require administrator approval before you can sign in.'
+            )}
+          </p>
+        )}
 
         {/* Submit Button */}
         <Button

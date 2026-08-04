@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -190,4 +191,90 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 60, rows[0].TokenUsed)
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
+}
+
+func TestGetQuotaDatesByChannelAggregatesByChannelAndTime(t *testing.T) {
+	truncateTables(t)
+	seedFlowLookupData(t)
+
+	// Same channel over two hours must stay two rows (per-channel time series).
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1000,
+		Count:     2,
+		Quota:     100,
+		TokenUsed: 40,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		ChannelID: 1,
+		CreatedAt: 1100,
+		Count:     1,
+		Quota:     50,
+		TokenUsed: 20,
+	})
+	// A different channel at the same hour is its own row.
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    2,
+		Username:  "bob",
+		UseGroup:  "default",
+		ModelName: "gpt-b",
+		ChannelID: 2,
+		CreatedAt: 1000,
+		Count:     3,
+		Quota:     25,
+		TokenUsed: 10,
+	})
+	// Rows without a channel keep channel_id 0 and must still be returned.
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		CreatedAt: 1200,
+		Count:     5,
+		Quota:     999,
+		TokenUsed: 100,
+	})
+
+	rows, err := GetQuotaDatesByChannel(900, 2000)
+	require.NoError(t, err)
+	require.Len(t, rows, 4)
+
+	byKey := make(map[string]*QuotaData, len(rows))
+	for _, row := range rows {
+		byKey[fmt.Sprintf("%d@%d", row.ChannelID, row.CreatedAt)] = row
+	}
+
+	ch1h1000 := byKey["1@1000"]
+	require.NotNil(t, ch1h1000)
+	require.Equal(t, "east", ch1h1000.ChannelName)
+	require.Equal(t, 2, ch1h1000.Count)
+	require.Equal(t, 100, ch1h1000.Quota)
+	require.Equal(t, 40, ch1h1000.TokenUsed)
+
+	ch1h1100 := byKey["1@1100"]
+	require.NotNil(t, ch1h1100)
+	require.Equal(t, "east", ch1h1100.ChannelName)
+	require.Equal(t, 1, ch1h1100.Count)
+	require.Equal(t, 50, ch1h1100.Quota)
+
+	ch2 := byKey["2@1000"]
+	require.NotNil(t, ch2)
+	require.Equal(t, "west", ch2.ChannelName)
+	require.Equal(t, 3, ch2.Count)
+	require.Equal(t, 25, ch2.Quota)
+
+	ch0 := byKey["0@1200"]
+	require.NotNil(t, ch0)
+	require.Empty(t, ch0.ChannelName)
+	require.Equal(t, 5, ch0.Count)
+	require.Equal(t, 999, ch0.Quota)
 }

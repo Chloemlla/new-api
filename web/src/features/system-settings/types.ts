@@ -447,3 +447,24 @@ export type UpstreamRatiosResponse = {
     test_results: TestResult[]
   }
 }
+
+export type PricingConfigDocument = {
+  version: number
+  exported_at: number
+  model_ratio: Record<string, number>
+  completion_ratio: Record<string, number>
+  cache_ratio: Record<string, number>
+  create_cache_ratio: Record<string, number>
+  image_ratio: Record<string, number>
+  audio_ratio: Record<string, number>
+  audio_completion_ratio: Record<string, number>
+  model_price: Record<string, number>
+  billing_mode: Record<string, string>
+  billing_expr: Record<string, string>
+}
+
+export type PricingConfigResponse = {
+  success: boolean
+  message: string
+  data?: PricingConfigDocument
+}

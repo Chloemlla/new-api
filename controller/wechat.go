@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -92,7 +93,12 @@ func WeChatAuth(c *gin.Context) {
 			user.Username = "wechat_" + strconv.Itoa(model.GetMaxUserId()+1)
 			user.DisplayName = "WeChat User"
 			user.Role = common.RoleCommonUser
-			user.Status = common.UserStatusEnabled
+			if common.UserRegistrationApprovalEnabled {
+				// 开启注册审核时，微信新注册用户同样进入待审核状态。
+				user.Status = common.UserStatusPending
+			} else {
+				user.Status = common.UserStatusEnabled
+			}
 
 			if err := user.Insert(0); err != nil {
 				c.JSON(http.StatusOK, gin.H{
@@ -111,6 +117,13 @@ func WeChatAuth(c *gin.Context) {
 	}
 
 	if user.Status != common.UserStatusEnabled {
+		if user.Status == common.UserStatusPending {
+			c.JSON(http.StatusOK, gin.H{
+				"message": i18n.T(c, i18n.MsgUserPendingApproval),
+				"success": false,
+			})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"message": "用户已被封禁",
 			"success": false,

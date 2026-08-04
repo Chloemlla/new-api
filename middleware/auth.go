@@ -272,6 +272,39 @@ func TokenOrUserAuth() func(c *gin.Context) {
 	}
 }
 
+// tokenIPCheckResult classifies the outcome of a token-level IP whitelist check.
+type tokenIPCheckResult int
+
+const (
+	// tokenIPAllowed means the token imposes no whitelist or the client IP is listed.
+	tokenIPAllowed tokenIPCheckResult = iota
+	// tokenIPClientUnparseable means the client IP could not be parsed at all.
+	tokenIPClientUnparseable
+	// tokenIPNotWhitelisted means the client IP is not on the token's allow list.
+	tokenIPNotWhitelisted
+)
+
+// checkTokenIPWhitelist verifies the request's client IP against the token's
+// AllowIps whitelist (plain IPs and CIDRs). Tokens without a configured
+// whitelist always pass.
+func checkTokenIPWhitelist(c *gin.Context, token *model.Token) tokenIPCheckResult {
+	allowIps := token.GetIpLimits()
+	if len(allowIps) == 0 {
+		return tokenIPAllowed
+	}
+	clientIp := c.ClientIP()
+	logger.LogDebug(c, "Token has IP restrictions, checking client IP %s", clientIp)
+	ip := net.ParseIP(clientIp)
+	if ip == nil {
+		return tokenIPClientUnparseable
+	}
+	if !common.IsIpInCIDRList(ip, allowIps) {
+		return tokenIPNotWhitelisted
+	}
+	logger.LogDebug(c, "Client IP %s passed the token IP restrictions check", clientIp)
+	return tokenIPAllowed
+}
+
 // TokenAuthReadOnly 宽松版本的令牌认证中间件，用于只读查询接口。
 // 只验证令牌 key 是否存在，不检查令牌状态、过期时间和额度。
 // 即使令牌已过期、已耗尽或已禁用，也允许访问。
@@ -318,6 +351,23 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"success": false,
 				"message": common.TranslateMessage(c, i18n.MsgTokenStatusUnavailable),
+			})
+			c.Abort()
+			return
+		}
+
+		switch checkTokenIPWhitelist(c, token) {
+		case tokenIPClientUnparseable:
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "无法解析客户端 IP 地址",
+			})
+			c.Abort()
+			return
+		case tokenIPNotWhitelisted:
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "您的 IP 不在令牌允许访问的列表中",
 			})
 			c.Abort()
 			return
@@ -424,20 +474,13 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		allowIps := token.GetIpLimits()
-		if len(allowIps) > 0 {
-			clientIp := c.ClientIP()
-			logger.LogDebug(c, "Token has IP restrictions, checking client IP %s", clientIp)
-			ip := net.ParseIP(clientIp)
-			if ip == nil {
-				abortWithOpenAiMessage(c, http.StatusForbidden, "无法解析客户端 IP 地址")
-				return
-			}
-			if common.IsIpInCIDRList(ip, allowIps) == false {
-				abortWithOpenAiMessage(c, http.StatusForbidden, "您的 IP 不在令牌允许访问的列表中", types.ErrorCodeAccessDenied)
-				return
-			}
-			logger.LogDebug(c, "Client IP %s passed the token IP restrictions check", clientIp)
+		switch checkTokenIPWhitelist(c, token) {
+		case tokenIPClientUnparseable:
+			abortWithOpenAiMessage(c, http.StatusForbidden, "无法解析客户端 IP 地址")
+			return
+		case tokenIPNotWhitelisted:
+			abortWithOpenAiMessage(c, http.StatusForbidden, "您的 IP 不在令牌允许访问的列表中", types.ErrorCodeAccessDenied)
+			return
 		}
 
 		userCache, err := model.GetUserCache(token.UserId)

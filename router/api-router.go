@@ -269,6 +269,17 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.DELETE("/invalid", controller.DeleteInvalidRedemption)
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
+		alertRuleRoute := apiRouter.Group("/alert-rule")
+		alertRuleRoute.Use(middleware.AdminAuth())
+		{
+			alertRuleRoute.GET("/", controller.GetAllAlertRules)
+			alertRuleRoute.GET("/:id", controller.GetAlertRule)
+			alertRuleRoute.POST("/", controller.AddAlertRule)
+			alertRuleRoute.PUT("/", controller.UpdateAlertRule)
+			alertRuleRoute.DELETE("/:id", controller.DeleteAlertRule)
+			alertRuleRoute.POST("/test", controller.TestAlertRule)
+			alertRuleRoute.POST("/check", controller.RunAlertRuleCheck)
+		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
@@ -299,6 +310,7 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
 		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
+			dataRoute.GET("/channels", middleware.AdminAuth(), controller.GetQuotaDatesByChannel)
 		dataRoute.GET("/flow/self", middleware.UserAuth(), controller.GetUserFlowQuotaDates)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
@@ -309,6 +321,7 @@ func SetApiRouter(router *gin.Engine) {
 		groupRoute.Use(middleware.AdminAuth())
 		{
 			groupRoute.GET("/", controller.GetGroups)
+			groupRoute.GET("/models", controller.GetGroupModels)
 		}
 
 		prefillGroupRoute := apiRouter.Group("/prefill_group")

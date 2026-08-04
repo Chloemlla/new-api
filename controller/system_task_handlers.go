@@ -13,15 +13,17 @@ import (
 )
 
 // RegisterScheduledSystemTasks wires the periodic channel test, upstream model
-// update, and async task polling (Midjourney / Suno / video) jobs into the
-// system task framework so a DB lease dedups execution across multiple master
-// instances and each run is recorded as one task row. Call this before
-// service.StartSystemTaskRunner.
+// update, async task polling (Midjourney / Suno / video), and alert rule check
+// jobs into the system task framework so a DB lease dedups execution across
+// multiple master instances and each run is recorded as one task row. Call this
+// before service.StartSystemTaskRunner.
 func RegisterScheduledSystemTasks() {
+	service.RefreshAlertRulesEnabled()
 	service.RegisterSystemTaskHandler(channelTestHandler{})
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(alertCheckHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -149,6 +151,24 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// alertCheckHandler runs the scheduled alert rule evaluation job. It is enabled
+// only while at least one enabled alert rule exists, so an idle system schedules
+// no task rows.
+type alertCheckHandler struct{}
+
+func (alertCheckHandler) Type() string { return model.SystemTaskTypeAlertCheck }
+
+func (alertCheckHandler) Enabled() bool { return service.AlertRulesEnabled() }
+
+func (alertCheckHandler) Interval() time.Duration { return service.AlertCheckInterval() }
+
+func (alertCheckHandler) NewPayload() any { return nil }
+
+func (alertCheckHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary := service.RunAlertRuleCheck(ctx)
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 

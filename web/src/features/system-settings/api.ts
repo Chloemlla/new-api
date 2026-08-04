@@ -22,6 +22,7 @@ import type {
   ConfirmPaymentComplianceResponse,
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
+  PricingConfigResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
   SystemTaskResponse,
@@ -102,6 +103,21 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   const res = await api.post<UpstreamRatiosResponse>(
     '/api/ratio_sync/fetch',
     request
+  )
+  return res.data
+}
+
+export async function exportPricingConfig() {
+  const res = await api.get<PricingConfigResponse>(
+    '/api/option/export_pricing'
+  )
+  return res.data
+}
+
+export async function importPricingConfig(payload: unknown) {
+  const res = await api.post<PricingConfigResponse>(
+    '/api/option/import_pricing',
+    payload
   )
   return res.data
 }

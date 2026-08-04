@@ -73,4 +73,8 @@ const (
 	// fallback in authHelper (finishAdminAudit) skips its record to avoid
 	// duplicate entries.
 	ContextKeyAuditLogged ContextKey = "audit_logged"
+
+	// ContextKeyRequestPriority stores the request priority level for
+	// load shedding and degradation decisions.
+	ContextKeyRequestPriority ContextKey = "request_priority"
 )

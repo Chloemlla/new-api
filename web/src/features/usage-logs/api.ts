@@ -16,10 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { AxiosResponse } from 'axios'
+
 import { api } from '@/lib/api'
 
-import { buildQueryParams } from './lib/utils'
+import { buildQueryParams } from './lib/filter'
 import type {
+  ExportLogsParams,
   GetLogsParams,
   GetLogsResponse,
   GetLogStatsParams,
@@ -89,6 +92,30 @@ export async function getUserInfo(
 ): Promise<{ success: boolean; message?: string; data?: UserInfo }> {
   const res = await api.get(`/api/user/${userId}`)
   return res.data
+}
+
+// ============================================================================
+// Log Export API
+// ============================================================================
+
+/**
+ * Downloads the logs matching the current filters as a CSV or JSON file.
+ * The response body is a binary blob; the server sets the download filename
+ * via `Content-Disposition` and flags truncation via `X-Export-Truncated`.
+ */
+export async function exportLogs(
+  params: ExportLogsParams,
+  isAdmin: boolean
+): Promise<AxiosResponse<Blob>> {
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const path = buildApiPath('/api/log/export', isAdmin)
+  return api.get(`${path}?${queryParams}`, {
+    responseType: 'blob',
+    skipErrorHandler: true,
+    disableDuplicate: true,
+  })
 }
 
 // ============================================================================

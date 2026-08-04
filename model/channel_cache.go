@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -22,6 +23,10 @@ var channelsIDM map[int]*Channel                     // all channels include dis
 // path-aware selection avoids re-parsing JSON per request. Refreshed on full sync.
 var channel2advancedCustomConfig map[int]*dto.AdvancedCustomConfig
 var channelSyncLock sync.RWMutex
+
+// inFlightRequests tracks the number of in-flight requests per channel.
+// Used for load-aware channel selection.
+var inFlightRequests sync.Map // map[int]*int64
 
 func InitChannelCache() {
 	if !common.MemoryCacheEnabled {
@@ -432,4 +437,146 @@ func CacheUpdateChannel(channel *Channel) {
 	// updatePricingLock while holding channelSyncLock would be an AB-BA deadlock.
 	channelSyncLock.Unlock()
 	InvalidatePricingCache()
+}
+
+// ---------------------------------------------------------------------------
+// In-flight request tracking for load-aware channel selection
+// ---------------------------------------------------------------------------
+
+// IncrementInFlightRequests increments the in-flight counter for a channel.
+func IncrementInFlightRequests(channelID int) {
+	v, _ := inFlightRequests.LoadOrStore(channelID, new(int64))
+	atomic.AddInt64(v.(*int64), 1)
+}
+
+// DecrementInFlightRequests decrements the in-flight counter for a channel.
+func DecrementInFlightRequests(channelID int) {
+	if v, ok := inFlightRequests.Load(channelID); ok {
+		atomic.AddInt64(v.(*int64), -1)
+	}
+}
+
+// GetInFlightRequests returns the current in-flight count for a channel.
+func GetInFlightRequests(channelID int) int64 {
+	if v, ok := inFlightRequests.Load(channelID); ok {
+		return atomic.LoadInt64(v.(*int64))
+	}
+	return 0
+}
+
+// GetAllInFlightRequests returns a map of channel ID to in-flight count.
+func GetAllInFlightRequests() map[int]int64 {
+	result := make(map[int]int64)
+	inFlightRequests.Range(func(key, value interface{}) bool {
+		result[key.(int)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+	return result
+}
+
+// GetRandomSatisfiedChannelWithLoadAware selects a channel with load awareness.
+// Among channels at the target priority, it prefers channels with fewer in-flight
+// requests, weighted by a combination of weight and inverse load factor.
+func GetRandomSatisfiedChannelWithLoadAware(group string, model string, retry int, requestPath string) (*Channel, error) {
+	if !common.MemoryCacheEnabled {
+		return GetChannel(group, model, retry, requestPath)
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+
+	channels := filterChannelsByRequestPathAndModel(group2model2channels[group][model], requestPath, model)
+	if len(channels) == 0 {
+		normalizedModel := ratio_setting.FormatMatchingModelName(model)
+		channels = filterChannelsByRequestPathAndModel(group2model2channels[group][normalizedModel], requestPath, model)
+	}
+
+	if len(channels) == 0 {
+		return nil, nil
+	}
+	if len(channels) == 1 {
+		if channel, ok := channelsIDM[channels[0]]; ok {
+			return channel, nil
+		}
+		return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channels[0])
+	}
+
+	// Find target priority based on retry index.
+	priorityIndex := -1
+	targetPriority := int64(0)
+	lastPriority := int64(0)
+	previousPriority := int64(0)
+	for _, channelId := range channels {
+		channel, ok := channelsIDM[channelId]
+		if !ok {
+			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+		}
+		priority := channel.GetPriority()
+		lastPriority = priority
+		if priorityIndex == -1 || priority != previousPriority {
+			priorityIndex++
+			if priorityIndex == retry {
+				targetPriority = priority
+			}
+			previousPriority = priority
+		}
+	}
+	if priorityIndex == -1 {
+		return nil, nil
+	}
+	if retry > priorityIndex {
+		targetPriority = lastPriority
+	}
+
+	// Build candidate list with effective weights adjusted by load.
+	type candidate struct {
+		channel *Channel
+		weight  int
+		load    int64
+	}
+	var candidates []candidate
+	totalWeight := 0
+
+	for _, channelId := range channels {
+		ch, ok := channelsIDM[channelId]
+		if !ok {
+			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelId)
+		}
+		if ch.GetPriority() != targetPriority {
+			continue
+		}
+		load := GetInFlightRequests(channelId)
+		baseWeight := int(ch.GetWeight())
+		if baseWeight <= 0 {
+			baseWeight = 100
+		}
+
+		// Adjust weight based on load: high load reduces effective weight.
+		loadFactor := 100
+		if load > 10 {
+			loadFactor = max(10, 100-int(load*5))
+		}
+		effectiveWeight := baseWeight * loadFactor / 100
+		if effectiveWeight <= 0 {
+			effectiveWeight = 1
+		}
+
+		candidates = append(candidates, candidate{channel: ch, weight: effectiveWeight, load: load})
+		totalWeight += effectiveWeight
+	}
+
+	if len(candidates) == 0 {
+		return nil, errors.New("no channel found")
+	}
+
+	// Weighted random selection.
+	randomWeight := rand.Intn(totalWeight)
+	for _, c := range candidates {
+		randomWeight -= c.weight
+		if randomWeight < 0 {
+			return c.channel, nil
+		}
+	}
+
+	return candidates[len(candidates)-1].channel, nil
 }

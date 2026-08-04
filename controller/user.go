@@ -66,6 +66,8 @@ func Login(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
 		case errors.Is(err, model.ErrUserEmptyCredentials):
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		case errors.Is(err, model.ErrUserPendingApproval):
+			common.ApiErrorI18n(c, i18n.MsgUserPendingApproval)
 		default:
 			common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordError)
 		}
@@ -269,6 +271,10 @@ func Register(c *gin.Context) {
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
+	if common.UserRegistrationApprovalEnabled {
+		// 开启注册审核时，新注册用户处于待审核状态，通过后才可登录。
+		cleanUser.Status = common.UserStatusPending
+	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
@@ -287,8 +293,8 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
 		return
 	}
-	// 生成默认令牌
-	if constant.GenerateDefaultToken {
+	// 生成默认令牌；待审核用户无法登录，暂不生成。
+	if constant.GenerateDefaultToken && cleanUser.Status != common.UserStatusPending {
 		key, err := common.GenerateKey()
 		if err != nil {
 			common.ApiErrorI18n(c, i18n.MsgUserDefaultTokenFailed)
@@ -316,6 +322,13 @@ func Register(c *gin.Context) {
 		}
 	}
 
+	if cleanUser.Status == common.UserStatusPending {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": i18n.T(c, i18n.MsgUserRegisteredPendingApproval),
+		})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -1120,6 +1133,20 @@ func ManageUser(c *gin.Context) {
 		}
 	case "enable":
 		user.Status = common.UserStatusEnabled
+	case "approve":
+		// 审核通过待注册用户
+		if user.Status != common.UserStatusPending {
+			common.ApiErrorI18n(c, i18n.MsgUserNotPendingApproval)
+			return
+		}
+		user.Status = common.UserStatusEnabled
+	case "reject":
+		// 拒绝待注册用户：禁用其账户，注册奖励不发
+		if user.Status != common.UserStatusPending {
+			common.ApiErrorI18n(c, i18n.MsgUserNotPendingApproval)
+			return
+		}
+		user.Status = common.UserStatusDisabled
 	case "delete":
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
@@ -1244,6 +1271,10 @@ func ManageUser(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+	}
+	// 审核通过后发放注册奖励（新用户额度与邀请奖励）。
+	if req.Action == "approve" {
+		model.ApplyRegistrationBonuses(user.Id, user.InviterId)
 	}
 	// Update/UpdateWithTx has already published the new user hash and revoked
 	// browser sessions exactly once. Only PAT/relay token caches still need an

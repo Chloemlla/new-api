@@ -37,5 +37,7 @@ RUN apt-get update \
 COPY --from=builder2 /build/new-api /
 COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /licenses/
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/health || exit 1
 WORKDIR /data
 ENTRYPOINT ["/new-api"]

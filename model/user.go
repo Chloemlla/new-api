@@ -594,7 +594,9 @@ func (user *User) Insert(inviterId int) error {
 			if err := user.prepareForInsert(tx); err != nil {
 				return err
 			}
-			user.Quota = common.QuotaForNewUser
+			if user.Status != common.UserStatusPending {
+				user.Quota = common.QuotaForNewUser
+			}
 			user.AffCode = common.GetRandomString(4)
 
 			// 初始化用户设置，包括默认的边栏配置
@@ -614,6 +616,40 @@ func (user *User) Insert(inviterId int) error {
 	return nil
 }
 
+// grantInviterRewards pays out the invitee/inviter referral rewards together
+// with their system logs.
+func grantInviterRewards(userId int, inviterId int) {
+	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
+		if common.QuotaForInvitee > 0 {
+			_ = IncreaseUserQuota(userId, common.QuotaForInvitee, true)
+			RecordLog(userId, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
+		}
+		if common.QuotaForInviter > 0 {
+			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
+			_ = inviteUser(inviterId)
+		}
+	}
+}
+
+// grantRegistrationBonuses grants the one-time registration rewards for an
+// account created in pending status and later approved by an administrator:
+// the starting quota (the pending account was stored with zero quota) plus the
+// referral rewards, together with their system logs. A rejected registration
+// never pays out any of these bonuses.
+func grantRegistrationBonuses(userId int, inviterId int) {
+	if common.QuotaForNewUser > 0 {
+		_ = IncreaseUserQuota(userId, common.QuotaForNewUser, true)
+		RecordLog(userId, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
+	}
+	grantInviterRewards(userId, inviterId)
+}
+
+// ApplyRegistrationBonuses grants the registration rewards for an account that
+// was approved by an administrator after being created in pending status.
+func ApplyRegistrationBonuses(userId int, inviterId int) {
+	grantRegistrationBonuses(userId, inviterId)
+}
+
 func (user *User) finishInsert(inviterId int) {
 	// 用户创建成功后，根据角色初始化边栏配置
 	// 需要重新获取用户以确保有正确的ID和Role
@@ -630,20 +666,14 @@ func (user *User) finishInsert(inviterId int) {
 		}
 	}
 
+	// 待审核用户不发放注册奖励，由管理员审核通过后发放。
+	if user.Status == common.UserStatusPending {
+		return
+	}
 	if common.QuotaForNewUser > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
-	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
-	}
+	grantInviterRewards(user.Id, inviterId)
 }
 
 func (user *User) FinishInsert(inviterId int) {
@@ -658,7 +688,9 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		if err := user.prepareForInsert(tx); err != nil {
 			return err
 		}
-		user.Quota = common.QuotaForNewUser
+		if user.Status != common.UserStatusPending {
+			user.Quota = common.QuotaForNewUser
+		}
 		user.AffCode = common.GetRandomString(4)
 
 		// 初始化用户设置
@@ -687,19 +719,14 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 	}
 
+	// 待审核用户不发放注册奖励，由管理员审核通过后发放。
+	if user.Status == common.UserStatusPending {
+		return
+	}
 	if common.QuotaForNewUser > 0 {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
-	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
-	}
+	grantInviterRewards(user.Id, inviterId)
 }
 
 func (user *User) Update(updatePassword bool) error {
@@ -953,6 +980,9 @@ func (user *User) ValidateAndFill() (err error) {
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)
 	if !okay || user.Status != common.UserStatusEnabled {
+		if user.Status == common.UserStatusPending {
+			return ErrUserPendingApproval
+		}
 		return ErrInvalidCredentials
 	}
 	return nil

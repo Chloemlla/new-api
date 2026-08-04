@@ -377,3 +377,19 @@ func UpdateOption(c *gin.Context) {
 		"message": "",
 	})
 }
+
+// ReloadConfig reloads all configuration from the database without restarting the server.
+// It triggers a full re-sync of channel cache, pricing cache, and all setting modules.
+func ReloadConfig(c *gin.Context) {
+	common.SysLog("configuration reload triggered by admin")
+
+	// Reload channel cache and options from database.
+	model.InitChannelCache()
+	model.InitOptionMap()
+
+	common.SysLog("configuration reload completed")
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "configuration reloaded",
+	})
+}

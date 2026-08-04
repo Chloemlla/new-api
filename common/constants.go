@@ -68,6 +68,7 @@ var WeChatAuthEnabled = false
 var TelegramOAuthEnabled = false
 var TurnstileCheckEnabled = false
 var RegisterEnabled = true
+var UserRegistrationApprovalEnabled = false // 注册后是否需要管理员审核
 
 var EmailDomainRestrictionEnabled = false // 是否启用邮箱域名限制
 var EmailAliasRestrictionEnabled = false  // 是否启用邮箱别名限制
@@ -225,6 +226,7 @@ var RateLimitKeyExpirationDuration = 20 * time.Minute
 const (
 	UserStatusEnabled  = 1 // don't use 0, 0 is the default value!
 	UserStatusDisabled = 2 // also don't use 0
+	UserStatusPending  = 3 // waiting for admin approval
 )
 
 const (

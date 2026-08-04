@@ -34,6 +34,7 @@ import { useUpdateOption } from '../hooks/use-update-option'
 import { positiveIntegerSchema } from '../utils/numeric-field'
 import { GroupRatioForm } from './group-ratio-form'
 import { ModelRatioForm } from './model-ratio-form'
+import { PricingImportExport } from './pricing-import-export'
 import { ToolPriceSettings } from './tool-price-settings'
 import { UpstreamRatioSync } from './upstream-ratio-sync'
 import {
@@ -144,6 +145,7 @@ type RatioTabId =
   | 'groups'
   | 'tool-prices'
   | 'upstream-sync'
+  | 'import-export'
 
 type RatioSettingsCardProps = {
   modelDefaults: ModelFormValues
@@ -408,6 +410,7 @@ export function RatioSettingsCard({
     groups: 'Group ratios',
     'tool-prices': 'Tool prices',
     'upstream-sync': 'Upstream price sync',
+    'import-export': 'Import / Export',
   }
   const tabsGridClass =
     {
@@ -416,6 +419,7 @@ export function RatioSettingsCard({
       3: 'grid-cols-3',
       4: 'grid-cols-4',
       5: 'grid-cols-5',
+      6: 'grid-cols-6',
     }[visibleTabs.length] ?? 'grid-cols-4'
   const defaultTab = visibleTabs[0] ?? 'models'
 
@@ -444,6 +448,9 @@ export function RatioSettingsCard({
     }
     if (tab === 'tool-prices') {
       return <ToolPriceSettings defaultValue={toolPricesDefault} />
+    }
+    if (tab === 'import-export') {
+      return <PricingImportExport />
     }
     return (
       <UpstreamRatioSync

@@ -24,7 +24,7 @@ import type { AdminPermissionMatrix } from '@/lib/admin-permissions'
 // User Schema & Types
 // ============================================================================
 
-/** User status: 1 = enabled, 2 = disabled, 3+ = other states */
+/** User status: 1 = enabled, 2 = disabled, 3 = pending approval, others = other states */
 export const userStatusSchema = z.number()
 export type UserStatus = z.infer<typeof userStatusSchema>
 
@@ -135,6 +135,8 @@ export type ManageUserAction =
   | 'disable'
   | 'delete'
   | 'add_quota'
+  | 'approve'
+  | 'reject'
 
 export type QuotaAdjustMode = 'add' | 'subtract' | 'override'
 

@@ -255,6 +255,47 @@ docker run --name new-api -d --restart always \
 
 </details>
 
+### ⚡ 性能与可靠性
+
+| 特性 | 说明 |
+|------|------|
+| 🔀 **分片限流器** | 64 分片 FNV-1a 并发限流器，消除高并发下的锁争用 |
+| 🧵 **有界协程池** | 协程池上限 20000，防止极端负载下 OOM |
+| 🔌 **更大的 Redis 连接池** | 默认连接池从 10 提升到 50，适配高吞吐场景 |
+| 📊 **自适应限流** | 根据实时 CPU 和内存使用率动态调整请求限制 |
+| 🚦 **请求队列与背压** | 优先级排序的请求队列，支持可配置的并发上限和超时 |
+| 🩺 **渠道健康探针** | 后台定时探测启用的渠道，连续 3 次失败自动禁用 |
+| ⛓️ **熔断器** | 三状态机（关闭 → 开启 → 半开），逐渠道防止级联故障 |
+| ⚖️ **负载感知渠道选择** | 同优先级渠道中优先选择正在处理请求数较少的渠道 |
+| 🎯 **请求优先级与降级** | 按用户角色（管理员/高级/普通/免费）分级，高负载时丢弃低优先级请求 |
+| 🔍 **分布式追踪** | 生成 Trace ID，记录各阶段耗时（鉴权、限流、分发、转发、计费） |
+| 🔄 **流量镜像** | 异步按比例复制请求到辅助渠道，用于验证新渠道 |
+| 📈 **性能仪表盘** | 实时 API 端点，展示系统健康度、熔断器状态、正在处理请求数和渠道健康度 |
+| 📡 **Redis 支持** | 通过原子 Lua 脚本实现分布式限流，同时支持 Redis 和内存模式 |
+| 🩻 **健康检查端点** | `GET /api/health` 返回数据库状态、CPU/内存使用率和运行时间，用于负载均衡探测 |
+| 📈 **Prometheus 指标** | `GET /api/performance/metrics` 暴露 Prometheus 格式指标，用于监控系统 |
+| 🔄 **配置热重载** | `POST /api/option/reload` 无需重启即可重新加载所有配置 |
+| 📖 **API 文档** | 内置 Swagger UI，访问 `/api/docs` 可浏览所有 API 端点 |
+| 👤 **注册审批** | 可选的管理员审批流程，新用户注册后需审核通过方可登录 |
+| 💾 **响应缓存** | 中间件缓存相同的确定性请求，命中时跳过上游调用 |
+| 🔒 **Token IP 白名单** | 逐 Token 设置 IP/CIDR 白名单，在所有鉴权中间件中强制执行 |
+| 📊 **渠道成本分析** | 按时间维度统计各渠道的消耗额度和请求量 |
+| 📥 **用量数据导出** | 在用量日志页面中下载 CSV 或 JSON 格式的消费记录 |
+| 🐳 **Docker HEALTHCHECK** | 容器健康检查，通过 `GET /api/health` 检测，可配置间隔和超时 |
+| 🔔 **告警规则** | 可配置触发条件（失败率 > X%、余额 < Y），通过 Webhook/邮件通知 |
+| 📋 **定价导入/导出** | 将模型定价配置导出为 JSON 或从 JSON 导入 |
+| 👥 **用户组管理 UI** | 管理后台页面，查看、创建、编辑用户组，配置模型访问和限流 |
+| 📊 **渠道成本分析 UI** | 交互式图表，展示各渠道的消耗额度和请求量随时间变化趋势 |
+
+**环境变量：**
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `REDIS_POOL_SIZE` | Redis 连接池大小 | `50` |
+| `PREMIUM_GROUPS` | 逗号分隔的高级用户组名，用于请求降级 | `vip,premium,pro` |
+| `BASIC_GROUPS` | 逗号分隔的普通用户组名，用于请求降级 | `basic,default` |
+| `MIRROR_REQUEST_TIMEOUT` | 流量镜像请求超时时间（秒） | `30` |
+
 ---
 
 ## 🤖 模型支持
@@ -338,6 +379,10 @@ docker run --name new-api -d --restart always \
 | `PYROSCOPE_MUTEX_RATE` | Pyroscope mutex 采样率                               | `5` |
 | `PYROSCOPE_BLOCK_RATE` | Pyroscope block 采样率                               | `5` |
 | `HOSTNAME` | Pyroscope 标签里的主机名                                          | `new-api` |
+| `REDIS_POOL_SIZE` | Redis 连接池大小                                               | `50` |
+| `PREMIUM_GROUPS` | 逗号分隔的高级用户组名，用于请求降级                   | `vip,premium,pro` |
+| `BASIC_GROUPS` | 逗号分隔的普通用户组名，用于请求降级                     | `basic,default` |
+| `MIRROR_REQUEST_TIMEOUT` | 流量镜像请求超时时间（秒）                      | `30` |
 
 📖 **完整配置：** [环境变量文档](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables)
 

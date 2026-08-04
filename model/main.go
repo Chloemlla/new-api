@@ -50,6 +50,14 @@ func initCol() {
 	}
 }
 
+// InitColumnNames initializes the dialect-specific column-name helpers from the
+// current main/log database types. It is called by InitDB and InitLogDB; it is
+// exported so tests and embedders that wire up their own GORM connection can
+// initialize the same state without running the full migration.
+func InitColumnNames() {
+	initCol()
+}
+
 var DB *gorm.DB
 
 var LOG_DB *gorm.DB
@@ -292,6 +300,7 @@ func migrateDB() error {
 		&SystemTaskLock{},
 		&CasbinRule{},
 		&AuthzRole{},
+		&AlertRule{},
 	)
 	if err != nil {
 		return err

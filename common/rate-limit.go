@@ -29,44 +29,84 @@ const (
 	rateLimitReservationRolledBack
 )
 
+// Exported aliases for testing.
+const (
+	RateLimitReservationNoop      = rateLimitReservationNoop
+	RateLimitReservationPending   = rateLimitReservationPending
+	RateLimitReservationCommitted = rateLimitReservationCommitted
+	RateLimitReservationRolledBack = rateLimitReservationRolledBack
+)
+
+// State returns the reservation's current state.
+func (r *RateLimitReservation) State() rateLimitReservationState {
+	if r == nil {
+		return rateLimitReservationNoop
+	}
+	return r.state
+}
+
+// inMemoryRateLimiterShard holds a portion of the key space. Using 64 shards
+// with FNV-1a hashing means concurrent rate-limit checks on different keys
+// almost never contend on the same mutex.
+type inMemoryRateLimiterShard struct {
+	mutex sync.Mutex
+	store map[string][]rateLimitEntry
+}
+
+const numRateLimiterShards = 64
+
+// InMemoryRateLimiter is a sharded in-memory rate limiter. Each key is mapped
+// to one of 64 shards via FNV-1a hashing, so concurrent operations on
+// different keys proceed without lock contention.
 type InMemoryRateLimiter struct {
-	store              map[string][]rateLimitEntry
-	mutex              sync.Mutex
+	shards             [numRateLimiterShards]inMemoryRateLimiterShard
 	expirationDuration time.Duration
 	nextEntryID        uint64
-	cleanupStarted     bool
+	cleanupOnce        sync.Once
+}
+
+func (l *InMemoryRateLimiter) shardForKey(key string) *inMemoryRateLimiterShard {
+	h := fnv1a(key)
+	return &l.shards[h&(numRateLimiterShards-1)]
+}
+
+// fnv1a returns the FNV-1a hash of s. It is allocation-free and fast.
+func fnv1a(s string) uint64 {
+	var h uint64 = 14695981039346656037 // offset basis
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211 // prime
+	}
+	return h
 }
 
 func (l *InMemoryRateLimiter) Init(expirationDuration time.Duration) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if l.store != nil {
-		return
-	}
-
-	l.store = make(map[string][]rateLimitEntry)
 	l.expirationDuration = expirationDuration
-	if expirationDuration > 0 && !l.cleanupStarted {
-		l.cleanupStarted = true
-		go l.clearExpiredItems()
+	if expirationDuration > 0 {
+		l.cleanupOnce.Do(func() {
+			go l.clearExpiredItems()
+		})
 	}
 }
 
 func (l *InMemoryRateLimiter) clearExpiredItems() {
 	for {
 		time.Sleep(l.expirationDuration)
-		l.mutex.Lock()
 		now := time.Now().Unix()
-		for key, queue := range l.store {
-			queue = removeExpiredEntries(queue, now, int64(l.expirationDuration.Seconds()))
-			if len(queue) == 0 {
-				delete(l.store, key)
-				continue
+		dur := int64(l.expirationDuration.Seconds())
+		for i := range l.shards {
+			shard := &l.shards[i]
+			shard.mutex.Lock()
+			for key, queue := range shard.store {
+				queue = removeExpiredEntries(queue, now, dur)
+				if len(queue) == 0 {
+					delete(shard.store, key)
+					continue
+				}
+				shard.store[key] = queue
 			}
-			l.store[key] = queue
+			shard.mutex.Unlock()
 		}
-		l.mutex.Unlock()
 	}
 }
 
@@ -90,26 +130,29 @@ func removeExpiredEntries(queue []rateLimitEntry, now, duration int64) []rateLim
 // Reserve atomically reserves one request slot. The slot remains counted until
 // Commit or Rollback is called. A maxRequestNum of zero disables the limit.
 func (l *InMemoryRateLimiter) Reserve(key string, maxRequestNum int, duration int64) (*RateLimitReservation, bool) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	shard := l.shardForKey(key)
+	shard.mutex.Lock()
 
-	if l.store == nil {
-		l.store = make(map[string][]rateLimitEntry)
+	if shard.store == nil {
+		shard.store = make(map[string][]rateLimitEntry)
 	}
 	if maxRequestNum <= 0 {
+		shard.mutex.Unlock()
 		return &RateLimitReservation{limiter: l, state: rateLimitReservationNoop}, true
 	}
 
 	now := time.Now().Unix()
-	queue := removeExpiredEntries(l.store[key], now, duration)
+	queue := removeExpiredEntries(shard.store[key], now, duration)
 	if len(queue) >= maxRequestNum {
-		l.store[key] = queue
+		shard.store[key] = queue
+		shard.mutex.Unlock()
 		return nil, false
 	}
 
 	l.nextEntryID++
 	entry := rateLimitEntry{id: l.nextEntryID, at: now}
-	l.store[key] = append(queue, entry)
+	shard.store[key] = append(queue, entry)
+	shard.mutex.Unlock()
 	return &RateLimitReservation{
 		limiter: l,
 		key:     key,
@@ -124,8 +167,9 @@ func (r *RateLimitReservation) Commit() {
 		return
 	}
 
-	r.limiter.mutex.Lock()
-	defer r.limiter.mutex.Unlock()
+	shard := r.limiter.shardForKey(r.key)
+	shard.mutex.Lock()
+	defer shard.mutex.Unlock()
 	if r.state == rateLimitReservationPending {
 		r.state = rateLimitReservationCommitted
 	}
@@ -138,20 +182,21 @@ func (r *RateLimitReservation) Rollback() {
 		return
 	}
 
-	r.limiter.mutex.Lock()
-	defer r.limiter.mutex.Unlock()
+	shard := r.limiter.shardForKey(r.key)
+	shard.mutex.Lock()
+	defer shard.mutex.Unlock()
 	if r.state != rateLimitReservationPending {
 		return
 	}
 
-	queue := r.limiter.store[r.key]
+	queue := shard.store[r.key]
 	for i, entry := range queue {
 		if entry.id == r.id {
 			queue = append(queue[:i], queue[i+1:]...)
 			if len(queue) == 0 {
-				delete(r.limiter.store, r.key)
+				delete(shard.store, r.key)
 			} else {
-				r.limiter.store[r.key] = queue
+				shard.store[r.key] = queue
 			}
 			break
 		}
@@ -172,15 +217,16 @@ func (l *InMemoryRateLimiter) Request(key string, maxRequestNum int, duration in
 // Cancel removes one previously admitted request from the in-memory window.
 // It is retained for callers using the legacy key-based rollback behavior.
 func (l *InMemoryRateLimiter) Cancel(key string) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	shard := l.shardForKey(key)
+	shard.mutex.Lock()
+	defer shard.mutex.Unlock()
 
-	queue, ok := l.store[key]
+	queue, ok := shard.store[key]
 	if !ok || len(queue) == 0 {
 		return
 	}
-	l.store[key] = queue[:len(queue)-1]
-	if len(l.store[key]) == 0 {
-		delete(l.store, key)
+	shard.store[key] = queue[:len(queue)-1]
+	if len(shard.store[key]) == 0 {
+		delete(shard.store, key)
 	}
 }

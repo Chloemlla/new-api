@@ -13,6 +13,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -79,6 +82,7 @@ type PerformanceConfig struct {
 	MonitorDiskThreshold int `json:"monitor_disk_threshold"`
 }
 
+// GetPerformanceStats 获取性能统计信息
 // GetPerformanceStats 获取性能统计信息
 func GetPerformanceStats(c *gin.Context) {
 	// 不再每次获取统计都全量扫描磁盘，依赖原子计数器保证性能
@@ -382,4 +386,133 @@ func getDiskCacheInfo() DiskCacheInfo {
 	}
 
 	return info
+}
+
+// GetDashboardHealthData returns high-level health data for the dashboard.
+func GetDashboardHealthData(c *gin.Context) {
+	status := common.GetSystemStatus()
+	monitorCfg := common.GetPerformanceMonitorConfig()
+	rlCfg := middleware.GetRequestQueueConfig()
+
+	// Get channel counts.
+	channelCount := 0
+	enabledCount := 0
+	openBreakers := 0
+	if channels := model.GetAllEnabledChannels(); channels != nil {
+		enabledCount = len(channels)
+	}
+	if total, err := model.CountAllChannels(); err == nil {
+		channelCount = int(total)
+	}
+	openBreakers = service.GetOpenCircuitBreakerCount()
+
+	// Get in-flight request data.
+	inFlight := model.GetAllInFlightRequests()
+
+	data := gin.H{
+		"system": gin.H{
+			"cpu_usage":       status.CPUUsage,
+			"memory_usage":    status.MemoryUsage,
+			"disk_usage":      status.DiskUsage,
+			"monitor_enabled": monitorCfg.Enabled,
+		},
+		"channels": gin.H{
+			"total":           channelCount,
+			"enabled":         enabledCount,
+			"open_breakers":   openBreakers,
+			"in_flight_total": sumInFlight(inFlight),
+		},
+		"request_queue": gin.H{
+			"enabled":          rlCfg.Enabled,
+			"active_requests":  middleware.GetActiveRequestCount(),
+			"queue_size":       0,
+			"max_concurrency":  rlCfg.MaxConcurrency,
+		},
+		"adaptive_limit": gin.H{
+			"enabled":        middleware.GetAdaptiveRateLimitConfig().Enabled,
+			"current_limit":  middleware.GetCurrentDynamicLimit(),
+		},
+	}
+
+	if rlCfg.Enabled {
+		stats := middleware.GetQueueStats()
+		data["request_queue"].(gin.H)["queue_size"] = stats["queue_size"]
+		data["request_queue"].(gin.H)["avg_wait_ms"] = stats["avg_wait_ms"]
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    data,
+	})
+}
+
+// GetDashboardChannelHealth returns channel health check results.
+func GetDashboardChannelHealth(c *gin.Context) {
+	results := service.GetAllChannelHealthResults()
+	type healthItem struct {
+		ChannelID           int    `json:"channel_id"`
+		ChannelName         string `json:"channel_name"`
+		LastChecked         string `json:"last_checked"`
+		Success             bool   `json:"success"`
+		LatencyMs           int64  `json:"latency_ms"`
+		ErrorMsg            string `json:"error_msg,omitempty"`
+		ConsecutiveFailures int    `json:"consecutive_failures"`
+	}
+	items := make([]healthItem, 0, len(results))
+	for _, r := range results {
+		items = append(items, healthItem{
+			ChannelID:           r.ChannelID,
+			ChannelName:         r.ChannelName,
+			LastChecked:         r.LastChecked.Format(time.RFC3339),
+			Success:             r.Success,
+			LatencyMs:           r.LatencyMs,
+			ErrorMsg:            r.ErrorMsg,
+			ConsecutiveFailures: r.ConsecutiveFailures,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    items,
+	})
+}
+
+// GetDashboardCircuitBreakers returns the state of all circuit breakers.
+func GetDashboardCircuitBreakers(c *gin.Context) {
+	states := service.GetAllCircuitBreakerStates()
+	type breakerItem struct {
+		ChannelID int    `json:"channel_id"`
+		State     string `json:"state"`
+	}
+	items := make([]breakerItem, 0, len(states))
+	for chID, state := range states {
+		stateStr := "closed"
+		switch state {
+		case service.CircuitBreakerOpen:
+			stateStr = "open"
+		case service.CircuitBreakerHalfOpen:
+			stateStr = "half_open"
+		}
+		items = append(items, breakerItem{ChannelID: chID, State: stateStr})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    items,
+	})
+}
+
+// GetDashboardInFlight returns in-flight request counts per channel.
+func GetDashboardInFlight(c *gin.Context) {
+	inFlight := model.GetAllInFlightRequests()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    inFlight,
+	})
+}
+
+func sumInFlight(m map[int]int64) int64 {
+	var total int64
+	for _, v := range m {
+		total += v
+	}
+	return total
 }

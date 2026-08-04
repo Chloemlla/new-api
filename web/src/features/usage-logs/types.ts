@@ -334,6 +334,16 @@ export interface GetLogsResponse {
   }
 }
 
+// ============================================================================
+// Log Export Types
+// ============================================================================
+
+export type LogExportFormat = 'csv' | 'json'
+
+export interface ExportLogsParams extends GetLogsParams {
+  format?: LogExportFormat
+}
+
 export interface GetLogStatsParams {
   type?: number
   username?: string

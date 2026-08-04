@@ -85,3 +85,23 @@ export function buildSearchParams(
 export function getLogCategoryLabel(category: LogCategory): string {
   return LOG_CATEGORY_LABELS[category]
 }
+
+/**
+ * Build a query string from a record of params.
+ * Keeps `0` as a valid value; only undefined, null, and empty strings are
+ * dropped. Lives here (a leaf module) so the api module can serialize query
+ * params without importing from utils, which itself depends on api.
+ */
+export function buildQueryParams(
+  params: Record<string, unknown>
+): URLSearchParams {
+  const queryParams = new URLSearchParams()
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      queryParams.append(key, String(value))
+    }
+  })
+
+  return queryParams
+}

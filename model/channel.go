@@ -1048,6 +1048,7 @@ func (channel *Channel) GetHeaderOverride() map[string]interface{} {
 	return headerOverride
 }
 
+// GetChannelsByIds returns channels by their IDs
 func GetChannelsByIds(ids []int) ([]*Channel, error) {
 	var channels []*Channel
 	err := DB.Where("id in (?)", ids).Find(&channels).Error
@@ -1139,4 +1140,23 @@ func CountChannelsGroupByType() (map[int64]int64, error) {
 		counts[r.Type] = r.Count
 	}
 	return counts, nil
+}
+
+// GetAllEnabledChannels returns all channels with status enabled.
+// Uses the in-memory cache when available, otherwise queries the database.
+func GetAllEnabledChannels() []*Channel {
+	if common.MemoryCacheEnabled {
+		channelSyncLock.RLock()
+		defer channelSyncLock.RUnlock()
+		var enabled []*Channel
+		for _, ch := range channelsIDM {
+			if ch.Status == common.ChannelStatusEnabled {
+				enabled = append(enabled, ch)
+			}
+		}
+		return enabled
+	}
+	var channels []*Channel
+	DB.Where("status = ?", common.ChannelStatusEnabled).Find(&channels)
+	return channels
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 func GetEnvOrDefault(env string, defaultValue int) int {
@@ -35,4 +36,18 @@ func GetEnvOrDefaultBool(env string, defaultValue bool) bool {
 		return defaultValue
 	}
 	return b
+}
+
+// GetEnvOrDefaultDuration returns the duration from an environment variable
+// in seconds, or the default value if the env var is not set or invalid.
+func GetEnvOrDefaultDuration(env string, defaultSeconds int) time.Duration {
+	if env == "" || os.Getenv(env) == "" {
+		return time.Duration(defaultSeconds) * time.Second
+	}
+	seconds, err := strconv.Atoi(os.Getenv(env))
+	if err != nil {
+		SysError(fmt.Sprintf("failed to parse %s: %s, using default: %ds", env, err.Error(), defaultSeconds))
+		return time.Duration(defaultSeconds) * time.Second
+	}
+	return time.Duration(seconds) * time.Second
 }
