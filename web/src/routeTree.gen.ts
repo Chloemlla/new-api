@@ -226,7 +226,7 @@ const AuthenticatedErrorsErrorRoute =
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedGroupsIndexRoute =
-nconst DocsIndexRoute = DocsIndexRouteImport.update({
+const DocsIndexRoute = DocsIndexRouteImport.update({
   id: "/docs/",
   path: "/docs/",
   getParentRoute: () => rootRouteImport,
@@ -437,7 +437,7 @@ export interface FileRoutesByFullPath {
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
-t'/docs/': typeof DocsIndexRoute
+'/docs/': typeof DocsIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
@@ -445,9 +445,9 @@ t'/docs/': typeof DocsIndexRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
-t'/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
+'/channels/analytics': typeof AuthenticatedChannelsAnalyticsRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
-t'/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
+'/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
   '/groups/': typeof AuthenticatedGroupsIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
@@ -794,7 +794,7 @@ export interface RootRouteChildren {
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
   PricingModelIdIndexRoute: typeof PricingModelIdIndexRoute
-tDocsIndexRoute: typeof DocsIndexRoute
+DocsIndexRoute: typeof DocsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1318,7 +1318,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
-tAuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
+AuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
 	AuthenticatedChannelsAnalyticsRoute: typeof AuthenticatedChannelsAnalyticsRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
 }
@@ -1341,7 +1341,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
-tAuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
+AuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
 	AuthenticatedChannelsAnalyticsRoute: AuthenticatedChannelsAnalyticsRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
@@ -1366,7 +1366,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors503Route: errors503Route,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
-tDocsIndexRoute: DocsIndexRoute,
+DocsIndexRoute: DocsIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,

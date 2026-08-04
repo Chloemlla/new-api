@@ -72,7 +72,7 @@ export async function getInFlight(): Promise<Record<number, number>> {
 export async function reloadConfig(): Promise<void> {
   await api.post('/api/option/reload')
 }
-nexport interface SystemInstanceListResponse {
+export interface SystemInstanceListResponse {
   success: boolean
   message: string
   data?: Array<{
