@@ -186,7 +186,7 @@ describe('API key group table cell', () => {
     )
     assert.equal(
       container.querySelectorAll('[data-auto-group-flow-border]').length,
-      0
+      1
     )
     assert.equal(
       container.querySelector('[data-auto-group-effect="ratio"]'),
