@@ -42,6 +42,11 @@ const (
 	ContextKeyAutoGroup           ContextKey = "auto_group"
 	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
+n	// ContextKeyHeldChannelLoad records which channel the current request holds
+	// an in-flight load slot on. Used by model.HoldChannelLoad /
+	// model.ReleaseHeldChannelLoad so a request that retries across channels
+	// moves, rather than double counts, its slot.
+	ContextKeyHeldChannelLoad ContextKey = "held_channel_load"
 
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"

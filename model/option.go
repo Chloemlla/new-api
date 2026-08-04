@@ -56,6 +56,9 @@ func InitOptionMap() {
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
+common.OptionMap["ChannelCircuitBreakerEnabled"] = strconv.FormatBool(common.CircuitBreakerEnabled)
+	common.OptionMap["ChannelCircuitBreakerFailureThreshold"] = strconv.Itoa(common.CircuitBreakerFailureThreshold)
+	common.OptionMap["ChannelCircuitBreakerCooldownSeconds"] = strconv.FormatInt(common.CircuitBreakerCooldownSeconds, 10)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
 	common.OptionMap["EmailDomainWhitelist"] = strings.Join(common.EmailDomainWhitelist, ",")
 	common.OptionMap["SMTPServer"] = ""
@@ -333,7 +336,9 @@ func updateOptionMap(key string, value string) (err error) {
 		case "AutomaticDisableChannelEnabled":
 			common.AutomaticDisableChannelEnabled = boolValue
 		case "AutomaticEnableChannelEnabled":
-			common.AutomaticEnableChannelEnabled = boolValue
+		common.AutomaticEnableChannelEnabled = boolValue
+		case "ChannelCircuitBreakerEnabled":
+			common.ConfigureCircuitBreaker(boolValue, common.CircuitBreakerFailureThreshold, common.CircuitBreakerCooldownSeconds)
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
@@ -577,13 +582,18 @@ func updateOptionMap(key string, value string) (err error) {
 	case "AudioCompletionRatio":
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "TopUpLink":
-		common.TopUpLink = value
-	//case "ChatLink":
+//case "ChatLink":
 	//	common.ChatLink = value
 	//case "ChatLink2":
 	//	common.ChatLink2 = value
 	case "ChannelDisableThreshold":
 		common.ChannelDisableThreshold, _ = strconv.ParseFloat(value, 64)
+	case "ChannelCircuitBreakerFailureThreshold":
+		threshold, _ := strconv.Atoi(value)
+		common.ConfigureCircuitBreaker(common.CircuitBreakerEnabled, threshold, common.CircuitBreakerCooldownSeconds)
+	case "ChannelCircuitBreakerCooldownSeconds":
+		cooldown, _ := strconv.ParseInt(value, 10, 64)
+		common.ConfigureCircuitBreaker(common.CircuitBreakerEnabled, common.CircuitBreakerFailureThreshold, cooldown)
 	case "QuotaPerUnit":
 		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":

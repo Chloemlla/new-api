@@ -64,6 +64,24 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 	return search
 }
 
+// ShouldRecordCircuitBreakerFailure reports whether a request failure should
+// count toward the channel circuit breaker. It mirrors ShouldDisableChannel but
+// is deliberately independent of the AutomaticDisableChannelEnabled toggle: the
+// in-memory breaker is a lighter fast-fail layer and operators may want it even
+// when full auto-disable is off. Channel-level errors and status codes on the
+// auto-disable list always count; the keyword search is skipped on the hot path.
+func ShouldRecordCircuitBreakerFailure(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	if types.IsChannelError(err) {
+		return true
+	}
+	if types.IsSkipRetryError(err) {
+		return false
+	}
+	return operation_setting.ShouldDisableByStatusCode(err.StatusCode)
+}
 func ShouldEnableChannel(newAPIError *types.NewAPIError, status int) bool {
 	if !common.AutomaticEnableChannelEnabled {
 		return false

@@ -162,6 +162,13 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+	if channel != nil {
+			// Hold an in-flight load slot for the selected channel until the
+			// whole request finishes. Retries move the slot (not double count
+			// it) inside controller.Relay via model.HoldChannelLoad.
+			model.HoldChannelLoad(c, channel.Id)
+			defer model.ReleaseHeldChannelLoad(c)
+		}
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {

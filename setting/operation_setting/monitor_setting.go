@@ -11,6 +11,11 @@ type MonitorSetting struct {
 	AutoTestChannelEnabled bool    `json:"auto_test_channel_enabled"`
 	AutoTestChannelMinutes float64 `json:"auto_test_channel_minutes"`
 	ChannelTestMode        string  `json:"channel_test_mode"`
+	// ProbeEnabled/ProbeMinutes control the lightweight channel health probe,
+	// which checks reachability and key validity without consuming generation
+	// quota. It is independent of the full channel test.
+	ProbeEnabled bool    `json:"probe_enabled"`
+	ProbeMinutes float64 `json:"probe_minutes"`
 }
 
 const (
@@ -23,6 +28,8 @@ var monitorSetting = MonitorSetting{
 	AutoTestChannelEnabled: false,
 	AutoTestChannelMinutes: 10,
 	ChannelTestMode:        ChannelTestModeScheduledAll,
+	ProbeEnabled:           false,
+	ProbeMinutes:           5,
 }
 
 func init() {
@@ -44,6 +51,22 @@ func GetMonitorSetting() *MonitorSetting {
 		if err == nil {
 			monitorSetting.AutoTestChannelEnabled = parsed
 		}
+	}
+	if os.Getenv("CHANNEL_PROBE_FREQUENCY") != "" {
+		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_PROBE_FREQUENCY"))
+		if err == nil && frequency > 0 {
+			monitorSetting.ProbeEnabled = true
+			monitorSetting.ProbeMinutes = float64(frequency)
+		}
+	}
+	if enabled, ok := os.LookupEnv("CHANNEL_PROBE_ENABLED"); ok {
+		parsed, err := strconv.ParseBool(enabled)
+		if err == nil {
+			monitorSetting.ProbeEnabled = parsed
+		}
+	}
+	if monitorSetting.ProbeMinutes <= 0 {
+		monitorSetting.ProbeMinutes = 5
 	}
 	if monitorSetting.ChannelTestMode != ChannelTestModePassiveRecovery {
 		monitorSetting.ChannelTestMode = ChannelTestModeScheduledAll

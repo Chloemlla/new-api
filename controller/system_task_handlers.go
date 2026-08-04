@@ -13,13 +13,14 @@ import (
 )
 
 // RegisterScheduledSystemTasks wires the periodic channel test, upstream model
-// update, async task polling (Midjourney / Suno / video), and alert rule check
-// jobs into the system task framework so a DB lease dedups execution across
-// multiple master instances and each run is recorded as one task row. Call this
-// before service.StartSystemTaskRunner.
+// update, async task polling (Midjourney / Suno / video), channel probe, and
+// alert rule check jobs into the system task framework so a DB lease dedups
+// execution across multiple master instances and each run is recorded as one
+// task row. Call this before service.StartSystemTaskRunner.
 func RegisterScheduledSystemTasks() {
 	service.RefreshAlertRulesEnabled()
 	service.RegisterSystemTaskHandler(channelTestHandler{})
+	service.RegisterSystemTaskHandler(channelProbeHandler{})
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
@@ -64,6 +65,37 @@ func (channelTestHandler) Run(ctx context.Context, task *model.SystemTask, runne
 		return
 	}
 	summary, err := runChannelTestTask(ctx, payload.Mode, payload.Notify, service.NewSystemTaskProgressReporter(task, runnerID))
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// channelProbeHandler runs the scheduled lightweight channel health probe job.
+// Unlike the full channel test it consumes no generation quota: each channel is
+// probed with a model list request that verifies reachability and key validity.
+// Enablement and cadence come from the monitor settings.
+type channelProbeHandler struct{}
+
+func (channelProbeHandler) Type() string { return model.SystemTaskTypeChannelProbe }
+
+func (channelProbeHandler) Enabled() bool {
+	return operation_setting.GetMonitorSetting().ProbeEnabled
+}
+
+func (channelProbeHandler) Interval() time.Duration {
+	minutes := operation_setting.GetMonitorSetting().ProbeMinutes
+	if minutes <= 0 {
+		minutes = 5
+	}
+	return time.Duration(minutes * float64(time.Minute))
+}
+
+func (channelProbeHandler) NewPayload() any { return nil }
+
+func (channelProbeHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	summary, err := runChannelProbeTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
 		return

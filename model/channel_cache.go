@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+
 )
 
 var group2model2channels map[string]map[string][]int // enabled channel
@@ -128,10 +129,12 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	// First, try to find channels with the exact model name.
 	channels := filterChannelsByRequestPathAndModel(group2model2channels[group][model], requestPath, model)
 
+	channels = filterChannelsByCircuitBreaker(channels)
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
 		channels = filterChannelsByRequestPathAndModel(group2model2channels[group][normalizedModel], requestPath, model)
+			channels = filterChannelsByCircuitBreaker(channels)
 	}
 
 	if len(channels) == 0 {
@@ -316,6 +319,22 @@ func filterChannelsByRequestPathAndModel(channels []int, requestPath string, mod
 	return filtered
 }
 
+// filterChannelsByCircuitBreaker drops channels whose circuit breaker is open so
+// a tripped channel is never selected for routing. It is a no-op (returns the
+// input slice) when the breaker is disabled. Caller must hold channelSyncLock
+// (read lock). The cached slice is never mutated.
+func filterChannelsByCircuitBreaker(channelIds []int) []int {
+	if !common.CircuitBreakerEnabled {
+		return channelIds
+	}
+	filtered := make([]int, 0, len(channelIds))
+	for _, channelId := range channelIds {
+		if !common.ChannelBreaker.IsBlocked(channelId) {
+			filtered = append(filtered, channelId)
+		}
+	}
+	return filtered
+}
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
 		return GetChannelById(id, true)
@@ -473,7 +492,39 @@ func GetAllInFlightRequests() map[int]int64 {
 	})
 	return result
 }
+// ChannelInFlight returns the number of in-flight requests for the given channel.
+func ChannelInFlight(channelID int) int {
+	return int(GetInFlightRequests(channelID))
+}
 
+// HoldChannelLoad records an in-flight load slot for the selected channel. It
+// releases any previous slot held by this request (from a retry across channels)
+// before holding the new one, so retries never double count in-flight load.
+func HoldChannelLoad(c interface {
+	GetInt(key string) int
+	Set(key string, value interface{})
+}, channelID int) {
+	held := c.GetInt(string(constant.ContextKeyHeldChannelLoad))
+	if held > 0 && held != channelID {
+		DecrementInFlightRequests(held)
+	}
+	if held != channelID {
+		IncrementInFlightRequests(channelID)
+		c.Set(string(constant.ContextKeyHeldChannelLoad), channelID)
+	}
+}
+
+// ReleaseHeldChannelLoad releases the in-flight slot held by the current request.
+func ReleaseHeldChannelLoad(c interface {
+	GetInt(key string) int
+	Set(key string, value interface{})
+}) {
+	held := c.GetInt(string(constant.ContextKeyHeldChannelLoad))
+	if held > 0 {
+		DecrementInFlightRequests(held)
+		c.Set(string(constant.ContextKeyHeldChannelLoad), 0)
+	}
+}
 // GetRandomSatisfiedChannelWithLoadAware selects a channel with load awareness.
 // Among channels at the target priority, it prefers channels with fewer in-flight
 // requests, weighted by a combination of weight and inverse load factor.
