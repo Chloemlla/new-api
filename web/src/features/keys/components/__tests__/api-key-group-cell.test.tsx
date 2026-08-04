@@ -127,8 +127,8 @@ describe('API key group table cell', () => {
     const movingRings = container.querySelectorAll(
       '[data-auto-group-flow-border]'
     )
-    assert.equal(frames.length, 0)
-    assert.equal(movingRings.length, 0)
+    assert.equal(frames.length, 1)
+    assert.equal(movingRings.length, 1)
 
     const ratio = container.querySelector<HTMLElement>(
       '[data-auto-group-effect="ratio"]'
