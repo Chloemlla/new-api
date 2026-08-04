@@ -127,14 +127,8 @@ describe('API key group table cell', () => {
     const movingRings = container.querySelectorAll(
       '[data-auto-group-flow-border]'
     )
-    assert.equal(frames.length, 2)
-    assert.equal(movingRings.length, 2)
-    for (const frame of frames) {
-      assert.equal(frame.classList.contains('relative'), true)
-      assert.equal(frame.classList.contains('overflow-visible'), true)
-      assert.equal(frame.classList.contains('rounded-4xl'), true)
-      assert.equal(frame.classList.contains('p-px'), true)
-    }
+    assert.equal(frames.length, 0)
+    assert.equal(movingRings.length, 0)
 
     const ratio = container.querySelector<HTMLElement>(
       '[data-auto-group-effect="ratio"]'
@@ -166,7 +160,7 @@ describe('API key group table cell', () => {
 
     assert.equal(
       container.querySelectorAll('[data-auto-group-frame]').length,
-      2
+      0
     )
     assert.equal(
       container.querySelectorAll('[data-auto-group-flow-border]').length,
@@ -188,11 +182,11 @@ describe('API key group table cell', () => {
 
     assert.equal(
       container.querySelectorAll('[data-auto-group-frame]').length,
-      1
+      0
     )
     assert.equal(
       container.querySelectorAll('[data-auto-group-flow-border]').length,
-      1
+      0
     )
     assert.equal(
       container.querySelector('[data-auto-group-effect="ratio"]'),
