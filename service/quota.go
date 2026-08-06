@@ -90,6 +90,12 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if relayInfo.UsePrice {
 		return nil
 	}
+	// Per-event debits must not run when a BillingSession is active: the session
+	// pre-consume plus the settle delta already cover the full charge, and the
+	// per-event debit would double the bill.
+	if relayInfo.Billing != nil {
+		return nil
+	}
 	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
 	if err != nil {
 		return err
