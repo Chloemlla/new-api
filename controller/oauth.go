@@ -17,7 +17,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const oauthAuthFlowTTL = 10 * time.Minute
+const (
+	oauthAuthFlowTTL       = 10 * time.Minute
+	oauthBrowserFlowCookie = "oauth_flow"
+)
 
 type oauthStateRequest struct {
 	Provider string `json:"provider"`
@@ -27,6 +30,7 @@ type oauthStateRequest struct {
 
 type oauthFlowPayload struct {
 	AffiliateCode string `json:"affiliate_code,omitempty"`
+	BrowserToken  string `json:"browser_token,omitempty"`
 }
 
 // providerParams returns map with Provider key for i18n templates
@@ -53,6 +57,8 @@ func GenerateOAuthCode(c *gin.Context) {
 	}
 	userID := 0
 	sessionID := ""
+	browserToken := ""
+	var err error
 	if request.Intent == model.AuthFlowIntentBind {
 		identity, ok := middleware.GetSessionAuthIdentity(c)
 		if !ok {
@@ -61,8 +67,26 @@ func GenerateOAuthCode(c *gin.Context) {
 		}
 		userID = identity.UserID
 		sessionID = identity.SessionID
+	} else {
+		// Bind the login flow to the initiating browser so a stolen flow_token
+		// + OAuth code cannot be replayed in a victim's browser (login CSRF).
+		browserToken, err = common.GenerateRandomCharsKey(32)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     oauthBrowserFlowCookie,
+			Value:    browserToken,
+			Path:     "/api/oauth",
+			MaxAge:   int(oauthAuthFlowTTL / time.Second),
+			Expires:  time.Now().Add(oauthAuthFlowTTL),
+			HttpOnly: true,
+			Secure:   common.SessionCookieSecure,
+			SameSite: http.SameSiteLaxMode,
+		})
 	}
-	payload, err := common.Marshal(oauthFlowPayload{AffiliateCode: request.Aff})
+	payload, err := common.Marshal(oauthFlowPayload{AffiliateCode: request.Aff, BrowserToken: browserToken})
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -139,6 +163,22 @@ func HandleOAuth(c *gin.Context) {
 		return
 	}
 
+	// Login flows must be bound to the browser that initiated them. The flow
+	// token travels through the provider redirect and an attacker could replay
+	// it in a victim's browser otherwise (login CSRF).
+	if pendingFlow.Intent == model.AuthFlowIntentLogin {
+		var loginPayload oauthFlowPayload
+		if err := common.UnmarshalJsonStr(pendingFlow.Payload, &loginPayload); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": i18n.T(c, i18n.MsgOAuthStateInvalid)})
+			return
+		}
+		browserToken, cookieErr := c.Cookie(oauthBrowserFlowCookie)
+		if cookieErr != nil || loginPayload.BrowserToken == "" || browserToken != loginPayload.BrowserToken {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": i18n.T(c, i18n.MsgOAuthStateInvalid)})
+			return
+		}
+	}
+
 	// 3. Check if provider is enabled
 	if !provider.IsEnabled() {
 		common.ApiErrorI18n(c, i18n.MsgOAuthNotEnabled, providerParams(provider.GetName()))
@@ -206,6 +246,8 @@ func HandleOAuth(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
 		case *OAuthEmailAlreadyTakenError:
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
+		case *OAuthLegacyBindingError:
+			common.ApiErrorI18n(c, i18n.MsgOAuthLegacyBindingRefused)
 		default:
 			common.ApiError(c, err)
 		}
@@ -314,23 +356,19 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		return user, nil
 	}
 
-	// Try to find user with legacy ID (for GitHub migration from login to numeric ID)
+	// Legacy new-api/one-api accounts stored the GitHub login (username) in the
+	// github_id column. Auto-migrating by login is unsafe: GitHub usernames are
+	// released and re-registerable after a rename, so an attacker who claims a
+	// freed login could log straight into the victim's account. Refuse instead
+	// and let the operator migrate the binding manually.
 	if legacyID, ok := oauthUser.Extra["legacy_id"].(string); ok && legacyID != "" {
 		if provider.IsUserIDTaken(legacyID) {
-			err := provider.FillUserByProviderID(user, legacyID)
-			if err != nil {
-				return nil, err
+			legacyUser := &model.User{}
+			if err := provider.FillUserByProviderID(legacyUser, legacyID); err == nil && legacyUser.Id != 0 {
+				common.SysLog(fmt.Sprintf("[OAuth] Refusing legacy login migration: login %q matches existing userId=%d; manual migration required",
+					legacyID, legacyUser.Id))
 			}
-			if user.Id != 0 {
-				// Found user with legacy ID, migrate to new ID
-				common.SysLog(fmt.Sprintf("[OAuth] Migrating user %d from legacy_id=%s to new_id=%s",
-					user.Id, legacyID, oauthUser.ProviderUserID))
-				if err := user.UpdateGitHubId(oauthUser.ProviderUserID); err != nil {
-					common.SysError(fmt.Sprintf("[OAuth] Failed to migrate user %d: %s", user.Id, err.Error()))
-					// Continue with login even if migration fails
-				}
-				return user, nil
-			}
+			return nil, &OAuthLegacyBindingError{}
 		}
 	}
 
@@ -459,6 +497,12 @@ type OAuthEmailAlreadyTakenError struct{}
 
 func (e *OAuthEmailAlreadyTakenError) Error() string {
 	return "email is already in use"
+}
+
+type OAuthLegacyBindingError struct{}
+
+func (e *OAuthLegacyBindingError) Error() string {
+	return "legacy oauth binding requires manual migration"
 }
 
 // handleOAuthError handles OAuth errors and returns translated message
