@@ -1,6 +1,7 @@
 package operation_setting
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 
@@ -14,14 +15,19 @@ type MonitorSetting struct {
 	// ProbeEnabled/ProbeMinutes control the lightweight channel health probe,
 	// which checks reachability and key validity without consuming generation
 	// quota. It is independent of the full channel test.
-	ProbeEnabled bool    `json:"probe_enabled"`
-	ProbeMinutes float64 `json:"probe_minutes"`
+	ProbeEnabled           bool    `json:"probe_enabled"`
+	ProbeMinutes           float64 `json:"probe_minutes"`
+	ChannelTestConcurrency int     `json:"channel_test_concurrency"`
 }
 
 const (
 	ChannelTestModeScheduledAll    = "scheduled_all"
 	ChannelTestModeAutoBanOnly     = "auto_ban_only"
 	ChannelTestModePassiveRecovery = "passive_recovery"
+
+	ChannelTestConcurrencyOptionKey = "monitor_setting.channel_test_concurrency"
+	DefaultChannelTestConcurrency   = 1
+	MaxChannelTestConcurrency       = 32
 )
 
 // 默认配置
@@ -31,6 +37,7 @@ var monitorSetting = MonitorSetting{
 	ChannelTestMode:        ChannelTestModeScheduledAll,
 	ProbeEnabled:           false,
 	ProbeMinutes:           5,
+	ChannelTestConcurrency: DefaultChannelTestConcurrency,
 }
 
 func init() {
@@ -74,5 +81,24 @@ func GetMonitorSetting() *MonitorSetting {
 	default:
 		monitorSetting.ChannelTestMode = ChannelTestModeScheduledAll
 	}
+	monitorSetting.ChannelTestConcurrency = NormalizeChannelTestConcurrency(monitorSetting.ChannelTestConcurrency)
 	return &monitorSetting
+}
+
+func NormalizeChannelTestConcurrency(concurrency int) int {
+	if concurrency < 1 {
+		return DefaultChannelTestConcurrency
+	}
+	if concurrency > MaxChannelTestConcurrency {
+		return MaxChannelTestConcurrency
+	}
+	return concurrency
+}
+
+func ValidateChannelTestConcurrency(value string) error {
+	concurrency, err := strconv.Atoi(value)
+	if err != nil || concurrency < 1 || concurrency > MaxChannelTestConcurrency {
+		return fmt.Errorf("channel test concurrency must be between 1 and %d", MaxChannelTestConcurrency)
+	}
+	return nil
 }
