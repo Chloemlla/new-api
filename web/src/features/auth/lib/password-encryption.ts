@@ -23,6 +23,7 @@ import { api } from '@/lib/api'
 interface PasswordEncryptionKey {
   kid: string
   public_key: string
+  nonce: string
 }
 
 export interface EncryptedPassword {
@@ -30,53 +31,54 @@ export interface EncryptedPassword {
   encryption_key_id: string
 }
 
-const KEY_CACHE_TTL_MS = 5 * 60_000
-
-let cachedKey: PasswordEncryptionKey | null = null
-let cachedAt = 0
-
-export function clearPasswordEncryptionCache(): void {
-  cachedKey = null
-  cachedAt = 0
-}
-
 export async function encryptPassword(
   password: string
 ): Promise<EncryptedPassword> {
+  let key: PasswordEncryptionKey
   try {
-    const key = await getPasswordEncryptionKey()
-    const ciphertext = await rsaOaepEncrypt(password, key.public_key)
-    return {
-      password_encrypted: ciphertext,
-      encryption_key_id: key.kid,
-    }
+    key = await getPasswordEncryptionKey()
   } catch (error: unknown) {
-    clearPasswordEncryptionCache()
+    // Key-fetch failures mean the login service is unavailable, not that the
+    // submitted credentials are wrong. Surface that distinction to the caller.
+    throw new Error(t('Login service unavailable, please retry'), {
+      cause: error,
+    })
+  }
+
+  let ciphertext: string
+  try {
+    ciphertext = await rsaOaepEncrypt(
+      JSON.stringify({ nonce: key.nonce, password }),
+      key.public_key
+    )
+  } catch (error: unknown) {
     throw new Error(t('Login failed'), { cause: error })
+  }
+
+  return {
+    password_encrypted: ciphertext,
+    encryption_key_id: key.kid,
   }
 }
 
 async function getPasswordEncryptionKey(): Promise<PasswordEncryptionKey> {
-  const now = Date.now()
-  if (cachedKey && now - cachedAt < KEY_CACHE_TTL_MS) {
-    return cachedKey
-  }
-
   const response = await api.get<{
     success: boolean
     data?: PasswordEncryptionKey
-  }>('/api/user/login/encryption-key')
+  }>('/api/user/login/encryption-key', {
+    skipErrorHandler: true,
+    skipBusinessError: true,
+    disableDuplicate: true,
+  })
   const key = response.data?.data
-  if (!response.data?.success || !key?.kid || !key.public_key) {
+  if (!response.data?.success || !key?.kid || !key.public_key || !key.nonce) {
     throw new Error('Password encryption key is unavailable')
   }
-  cachedKey = key
-  cachedAt = now
   return key
 }
 
 async function rsaOaepEncrypt(
-  password: string,
+  plaintext: string,
   publicKeyPEM: string
 ): Promise<string> {
   if (typeof globalThis.crypto?.subtle !== 'undefined') {
@@ -91,7 +93,7 @@ async function rsaOaepEncrypt(
       const ciphertext = await globalThis.crypto.subtle.encrypt(
         { name: 'RSA-OAEP' },
         publicKey,
-        new TextEncoder().encode(password)
+        new TextEncoder().encode(plaintext)
       )
       return arrayBufferToBase64(ciphertext)
     } catch {
@@ -105,7 +107,7 @@ async function rsaOaepEncrypt(
   const forge = await import('node-forge')
   const publicKey = forge.pki.publicKeyFromPem(publicKeyPEM)
   const ciphertext = publicKey.encrypt(
-    forge.util.encodeUtf8(password),
+    forge.util.encodeUtf8(plaintext),
     'RSA-OAEP',
     { md: forge.md.sha256.create() }
   )

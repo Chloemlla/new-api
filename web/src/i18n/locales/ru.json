@@ -2507,6 +2507,7 @@
         "Login Info": "Информация о входе",
         "Login Method": "Способ входа",
         "Login failed": "Ошибка входа",
+        "Login service unavailable, please retry": "Сервис входа недоступен, повторите попытку",
         "Login flow expired. Please sign in again.": "Процесс входа истёк. Войдите снова.",
         "Login sessions": "Сеансы входа",
         "Logo": "Логотип",

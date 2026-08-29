@@ -49,10 +49,16 @@ func GetPasswordEncryptionKey(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
 		return
 	}
+	nonce, nonceKeyID, err := common.IssuePasswordEncryptionNonce()
+	if err != nil || nonceKeyID != keyID {
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		return
+	}
 	common.ApiSuccess(c, gin.H{
 		"enabled":    true,
 		"kid":        keyID,
 		"public_key": publicKey,
+		"nonce":      nonce,
 	})
 }
 
@@ -69,8 +75,12 @@ func Login(c *gin.Context) {
 	}
 	username := loginRequest.Username
 	password := loginRequest.Password
-	if common.PasswordLoginEncryptionEnabled {
-		if loginRequest.PasswordEncrypted == "" || loginRequest.EncryptionKeyID == "" {
+	if loginRequest.PasswordEncrypted != "" {
+		if !common.PasswordLoginEncryptionEnabled {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+		if loginRequest.EncryptionKeyID == "" {
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return
 		}

@@ -2507,6 +2507,7 @@
         "Login Info": "登录信息",
         "Login Method": "登录方式",
         "Login failed": "登录失败",
+        "Login service unavailable, please retry": "登录服务暂不可用，请稍后重试",
         "Login flow expired. Please sign in again.": "登录流程已过期，请重新登录。",
         "Login sessions": "登录会话",
         "Logo": "徽标",

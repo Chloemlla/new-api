@@ -2507,6 +2507,7 @@
         "Login Info": "Informations de connexion",
         "Login Method": "Méthode de connexion",
         "Login failed": "Échec de la connexion",
+        "Login service unavailable, please retry": "Service de connexion indisponible, veuillez réessayer",
         "Login flow expired. Please sign in again.": "Le processus de connexion a expiré. Veuillez vous reconnecter.",
         "Login sessions": "Sessions de connexion",
         "Logo": "Logo",

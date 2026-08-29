@@ -2507,6 +2507,7 @@
         "Login Info": "ログイン情報",
         "Login Method": "ログイン方法",
         "Login failed": "ログインに失敗しました",
+        "Login service unavailable, please retry": "ログインサービスを利用できません。しばらくしてから再試行してください",
         "Login flow expired. Please sign in again.": "ログイン手続きの有効期限が切れました。もう一度サインインしてください。",
         "Login sessions": "ログインセッション",
         "Logo": "ロゴ",

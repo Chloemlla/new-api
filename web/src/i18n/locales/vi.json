@@ -2507,6 +2507,7 @@
         "Login Info": "Thông tin đăng nhập",
         "Login Method": "Phương thức đăng nhập",
         "Login failed": "Đăng nhập thất bại",
+        "Login service unavailable, please retry": "Dịch vụ đăng nhập hiện không khả dụng, vui lòng thử lại sau",
         "Login flow expired. Please sign in again.": "Quy trình đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
         "Login sessions": "Phiên đăng nhập",
         "Logo": "Logo",

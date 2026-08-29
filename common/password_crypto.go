@@ -12,11 +12,23 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
-const passwordEncryptionKeyBits = 2048
+const (
+	passwordEncryptionKeyBits  = 2048
+	passwordEncryptionNonceTTL = 5 * time.Minute
+)
 
 var ErrPasswordEncryptionInvalid = errors.New("password encryption payload is invalid")
+
+// passwordEncryptionPayload is the JSON envelope encrypted with the public key.
+// The nonce binds each ciphertext to a single server-issued login attempt so a
+// captured ciphertext cannot be replayed.
+type passwordEncryptionPayload struct {
+	Nonce    string `json:"nonce"`
+	Password string `json:"password"`
+}
 
 var passwordEncryptionState struct {
 	sync.RWMutex
@@ -93,8 +105,10 @@ func PasswordEncryptionPublicKey() (keyID string, publicKeyPEM string) {
 }
 
 // DecryptPassword decrypts a base64 RSA-OAEP/SHA-256 password submitted by a
-// browser. All malformed inputs share one error so callers do not expose
-// cryptographic details to unauthenticated clients.
+// browser. The plaintext must be a passwordEncryptionPayload whose nonce is
+// issued by this server and has not already been consumed; otherwise the
+// ciphertext is treated as invalid. All malformed inputs share one error so
+// callers do not expose cryptographic details to unauthenticated clients.
 func DecryptPassword(ciphertextBase64 string, keyID string) (string, error) {
 	passwordEncryptionState.RLock()
 	privateKey := passwordEncryptionState.privateKey
@@ -111,5 +125,73 @@ func DecryptPassword(ciphertextBase64 string, keyID string) (string, error) {
 	if err != nil || len(plaintext) == 0 {
 		return "", ErrPasswordEncryptionInvalid
 	}
-	return string(plaintext), nil
+	var payload passwordEncryptionPayload
+	if err := Unmarshal(plaintext, &payload); err != nil {
+		return "", ErrPasswordEncryptionInvalid
+	}
+	if payload.Password == "" || payload.Nonce == "" {
+		return "", ErrPasswordEncryptionInvalid
+	}
+	if !consumePasswordEncryptionNonce(payload.Nonce, keyID) {
+		return "", ErrPasswordEncryptionInvalid
+	}
+	return payload.Password, nil
+}
+
+// ---------------------------------------------------------------------------
+// One-time login nonces
+// ---------------------------------------------------------------------------
+
+type passwordEncryptionNonceRecord struct {
+	keyID     string
+	expiresAt time.Time
+}
+
+var passwordEncryptionNonces struct {
+	sync.Mutex
+	byValue map[string]passwordEncryptionNonceRecord
+}
+
+// IssuePasswordEncryptionNonce issues a single-use nonce bound to the active
+// encryption key. Login ciphertexts must carry it, and it is consumed exactly
+// once so a captured ciphertext cannot be replayed. Expired nonces are purged
+// opportunistically on each issuance to bound the store.
+func IssuePasswordEncryptionNonce() (nonce string, keyID string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	keyID, _ = PasswordEncryptionPublicKey()
+	nonce = hex.EncodeToString(raw)
+
+	passwordEncryptionNonces.Lock()
+	defer passwordEncryptionNonces.Unlock()
+	if passwordEncryptionNonces.byValue == nil {
+		passwordEncryptionNonces.byValue = make(map[string]passwordEncryptionNonceRecord)
+	}
+	now := time.Now()
+	for value, record := range passwordEncryptionNonces.byValue {
+		if now.After(record.expiresAt) {
+			delete(passwordEncryptionNonces.byValue, value)
+		}
+	}
+	passwordEncryptionNonces.byValue[nonce] = passwordEncryptionNonceRecord{
+		keyID:     keyID,
+		expiresAt: now.Add(passwordEncryptionNonceTTL),
+	}
+	return nonce, keyID, nil
+}
+
+// consumePasswordEncryptionNonce atomically validates and consumes a one-time
+// nonce. Unknown, expired, and replayed nonces all return false so callers do
+// not learn why a login attempt was rejected.
+func consumePasswordEncryptionNonce(nonce string, keyID string) bool {
+	passwordEncryptionNonces.Lock()
+	defer passwordEncryptionNonces.Unlock()
+	record, ok := passwordEncryptionNonces.byValue[nonce]
+	if !ok {
+		return false
+	}
+	delete(passwordEncryptionNonces.byValue, nonce)
+	return record.keyID == keyID && !time.Now().After(record.expiresAt)
 }

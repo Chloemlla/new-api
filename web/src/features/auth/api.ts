@@ -22,7 +22,6 @@ import { api, refreshAuthentication, type RefreshOutcome } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
-  clearPasswordEncryptionCache,
   encryptPassword,
 } from './lib/password-encryption'
 import { getAffiliateCode } from './lib/storage'
@@ -47,37 +46,27 @@ import type {
 // User login with username and password
 export async function login(payload: LoginPayload): Promise<LoginResponse> {
   const turnstile = payload.turnstile ?? ''
-  try {
-    let passwordFields:
-      | { password: string }
-      | { password_encrypted: string; encryption_key_id: string }
-    if (payload.passwordEncryptionEnabled) {
-      const encryptedPassword = await encryptPassword(payload.password)
-      passwordFields = {
-        password_encrypted: encryptedPassword.password_encrypted,
-        encryption_key_id: encryptedPassword.encryption_key_id,
-      }
-    } else {
-      passwordFields = { password: payload.password }
+  let passwordFields:
+    | { password: string }
+    | { password_encrypted: string; encryption_key_id: string }
+  if (payload.passwordEncryptionEnabled) {
+    const encryptedPassword = await encryptPassword(payload.password)
+    passwordFields = {
+      password_encrypted: encryptedPassword.password_encrypted,
+      encryption_key_id: encryptedPassword.encryption_key_id,
     }
-    const res = await api.post<LoginResponse>(
-      `/api/user/login?turnstile=${turnstile}`,
-      {
-        username: payload.username,
-        ...passwordFields,
-      },
-      { skipAuthRefresh: true }
-    )
-    if (payload.passwordEncryptionEnabled && !res.data?.success) {
-      clearPasswordEncryptionCache()
-    }
-    return res.data
-  } catch (error: unknown) {
-    if (payload.passwordEncryptionEnabled) {
-      clearPasswordEncryptionCache()
-    }
-    throw error
+  } else {
+    passwordFields = { password: payload.password }
   }
+  const res = await api.post<LoginResponse>(
+    `/api/user/login?turnstile=${turnstile}`,
+    {
+      username: payload.username,
+      ...passwordFields,
+    },
+    { skipAuthRefresh: true }
+  )
+  return res.data
 }
 
 // Two-factor authentication login
