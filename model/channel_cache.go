@@ -247,7 +247,11 @@ func GetSatisfiedChannelPriorityCount(group string, model string, requestPath st
 			if err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true).Find(&abilities).Error; err != nil {
 				return 0, err
 			}
-			abilities = filterAbilitiesByRequestPathAndModel(abilities, requestPath, model)
+			if requestPath != "" {
+				abilities = filterAbilitiesByConstraints(abilities, model, []dto.ChannelFilter{
+					{Kind: dto.FilterRequestPath, RequestPath: requestPath},
+				})
+			}
 			priorities := make(map[int64]struct{}, len(abilities))
 			for _, ability := range abilities {
 				if ability.Priority != nil {
