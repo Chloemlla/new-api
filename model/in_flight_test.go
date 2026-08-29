@@ -79,7 +79,7 @@ func TestGetRandomSatisfiedChannelWithLoadAwareNoPanic(t *testing.T) {
 	defer func() { common.MemoryCacheEnabled = prevMemCache }()
 
 	assert.NotPanics(t, func() {
-		_, _ = GetRandomSatisfiedChannelWithLoadAware("nonexistent", "nonexistent-model", 0, "")
+		_, _ = GetRandomSatisfiedChannelWithLoadAware("nonexistent", "nonexistent-model", 0, nil)
 	})
 }
 
