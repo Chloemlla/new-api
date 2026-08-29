@@ -90,6 +90,10 @@ func Login(c *gin.Context) {
 			return
 		}
 	}
+	if common.PasswordLoginEncryptionEnabled && loginRequest.PasswordEncrypted == "" {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
 	if username == "" || password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
