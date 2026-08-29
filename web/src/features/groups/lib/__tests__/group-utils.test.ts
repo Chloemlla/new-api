@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
 import type { GroupSettings } from '../../types'
 import {
@@ -59,15 +58,15 @@ describe('parseGroupSettings', () => {
 
     const settings = parseGroupSettings(options)
 
-    assert.deepEqual(settings.groupRatio, { default: 1, vip: 0.8 })
-    assert.deepEqual(settings.userUsableGroups, { default: 'Default' })
-    assert.deepEqual(settings.topupGroupRatio, { default: 1 })
-    assert.deepEqual(settings.groupGroupRatio, { vip: { default: 0.9 } })
-    assert.deepEqual(settings.groupSpecialUsableGroup, {
+    expect(settings.groupRatio).toEqual({ default: 1, vip: 0.8 })
+    expect(settings.userUsableGroups).toEqual({ default: 'Default' })
+    expect(settings.topupGroupRatio).toEqual({ default: 1 })
+    expect(settings.groupGroupRatio).toEqual({ vip: { default: 0.9 } })
+    expect(settings.groupSpecialUsableGroup).toEqual({
       vip: { '+:premium': 'Premium' },
     })
-    assert.deepEqual(settings.autoGroups, ['default', 'vip'])
-    assert.deepEqual(settings.rateLimitGroup, { default: [100, 50] })
+    expect(settings.autoGroups).toEqual(['default', 'vip'])
+    expect(settings.rateLimitGroup).toEqual({ default: [100, 50] })
   })
 
   test('falls back to empty defaults for missing or malformed options', () => {
@@ -75,9 +74,9 @@ describe('parseGroupSettings', () => {
       { key: 'GroupRatio', value: 'not-json' },
     ])
 
-    assert.deepEqual(settings.groupRatio, {})
-    assert.deepEqual(settings.userUsableGroups, {})
-    assert.deepEqual(settings.autoGroups, [])
+    expect(settings.groupRatio).toEqual({})
+    expect(settings.userUsableGroups).toEqual({})
+    expect(settings.autoGroups).toEqual([])
   })
 })
 
@@ -90,10 +89,11 @@ describe('buildUserGroups', () => {
     })
     const groups = buildUserGroups(settings, { vip: ['gpt-4o'], default: [] })
 
-    assert.deepEqual(
-      groups.map((group) => group.name),
-      ['default', 'premium', 'vip']
-    )
+    expect(groups.map((group) => group.name)).toEqual([
+      'default',
+      'premium',
+      'vip',
+    ])
   })
 
   test('fills defaults and attaches rate limits and model counts', () => {
@@ -107,21 +107,21 @@ describe('buildUserGroups', () => {
     })
 
     const defaultGroup = groups.find((group) => group.name === 'default')
-    assert.ok(defaultGroup)
-    assert.equal(defaultGroup.ratio, 1)
-    assert.equal(defaultGroup.topupRatio, null)
-    assert.equal(defaultGroup.selectable, true)
-    assert.equal(defaultGroup.description, 'Default group')
-    assert.deepEqual(defaultGroup.rateLimit, {
+    expect(defaultGroup).toBeTruthy()
+    expect(defaultGroup?.ratio).toBe(1)
+    expect(defaultGroup?.topupRatio).toBe(null)
+    expect(defaultGroup?.selectable).toBe(true)
+    expect(defaultGroup?.description).toBe('Default group')
+    expect(defaultGroup?.rateLimit).toEqual({
       maxRequests: 100,
       maxSuccess: 50,
     })
-    assert.equal(defaultGroup.modelCount, 2)
+    expect(defaultGroup?.modelCount).toBe(2)
 
     const vipGroup = groups.find((group) => group.name === 'vip')
-    assert.ok(vipGroup)
-    assert.equal(vipGroup.ratio, 0.8)
-    assert.equal(vipGroup.modelCount, 1)
+    expect(vipGroup).toBeTruthy()
+    expect(vipGroup?.ratio).toBe(0.8)
+    expect(vipGroup?.modelCount).toBe(1)
   })
 })
 
@@ -137,10 +137,10 @@ describe('applyGroupUpsert', () => {
       rateLimit: { maxRequests: 200, maxSuccess: 100 },
     })
 
-    assert.equal(next.groupRatio.premium, 0.5)
-    assert.equal(next.userUsableGroups.premium, 'Premium group')
-    assert.equal(next.topupGroupRatio.premium, 1.2)
-    assert.deepEqual(next.rateLimitGroup.premium, [200, 100])
+    expect(next.groupRatio.premium).toBe(0.5)
+    expect(next.userUsableGroups.premium).toBe('Premium group')
+    expect(next.topupGroupRatio.premium).toBe(1.2)
+    expect(next.rateLimitGroup.premium).toEqual([200, 100])
   })
 
   test('clears top-up ratio when left empty', () => {
@@ -154,9 +154,9 @@ describe('applyGroupUpsert', () => {
       rateLimit: null,
     })
 
-    assert.equal(Object.hasOwn(next.topupGroupRatio, 'vip'), false)
-    assert.equal(Object.hasOwn(next.userUsableGroups, 'vip'), false)
-    assert.equal(Object.hasOwn(next.rateLimitGroup, 'vip'), false)
+    expect(Object.hasOwn(next.topupGroupRatio, 'vip')).toBe(false)
+    expect(Object.hasOwn(next.userUsableGroups, 'vip')).toBe(false)
+    expect(Object.hasOwn(next.rateLimitGroup, 'vip')).toBe(false)
   })
 })
 
@@ -177,17 +177,17 @@ describe('applyGroupDelete', () => {
 
     const next = applyGroupDelete(settings, 'vip')
 
-    assert.equal(Object.hasOwn(next.groupRatio, 'vip'), false)
-    assert.equal(Object.hasOwn(next.userUsableGroups, 'vip'), false)
-    assert.equal(Object.hasOwn(next.topupGroupRatio, 'vip'), false)
-    assert.equal(Object.hasOwn(next.rateLimitGroup, 'vip'), false)
-    assert.deepEqual(next.autoGroups, ['default', 'premium'])
+    expect(Object.hasOwn(next.groupRatio, 'vip')).toBe(false)
+    expect(Object.hasOwn(next.userUsableGroups, 'vip')).toBe(false)
+    expect(Object.hasOwn(next.topupGroupRatio, 'vip')).toBe(false)
+    expect(Object.hasOwn(next.rateLimitGroup, 'vip')).toBe(false)
+    expect(next.autoGroups).toEqual(['default', 'premium'])
 
     // vip removed as both a source and a target of overrides.
-    assert.deepEqual(next.groupGroupRatio, {
+    expect(next.groupGroupRatio).toEqual({
       premium: { default: 0.8 },
     })
-    assert.deepEqual(next.groupSpecialUsableGroup, {
+    expect(next.groupSpecialUsableGroup).toEqual({
       premium: { '+:vip': 'VIP' },
     })
   })
@@ -208,20 +208,19 @@ describe('computeOptionUpdates', () => {
     const updates = computeOptionUpdates(before, after)
     const keys = updates.map((update) => update.key)
 
-    assert.deepEqual(keys, ['GroupRatio', 'UserUsableGroups'])
-    assert.equal(updates[0].value, JSON.stringify(after.groupRatio))
+    expect(keys).toEqual(['GroupRatio', 'UserUsableGroups'])
+    expect(updates[0].value).toBe(JSON.stringify(after.groupRatio))
   })
 
   test('emits no updates when nothing changed', () => {
     const before = makeSettings()
     const after = makeSettings()
-    assert.deepEqual(computeOptionUpdates(before, after), [])
+    expect(computeOptionUpdates(before, after)).toEqual([])
   })
 
   test('serialized settings are stable JSON for unchanged data', () => {
     const settings = makeSettings()
-    assert.equal(
-      serializeGroupSettings(settings).GroupRatio,
+    expect(serializeGroupSettings(settings).GroupRatio).toBe(
       '{"default":1,"vip":0.8}'
     )
   })

@@ -118,20 +118,25 @@ describe('API key group table cell', () => {
     ).toBe(0)
   })
 
-  test('shows only the cross-group badge when ratio data is unavailable', () => {
+  test('falls back to the Auto group badge frame when ratio data is unavailable', () => {
     const { container } = render(
       <CellHarness group='auto' shouldReduceMotion={false} />
     )
 
-    expect(container.querySelectorAll('[data-auto-group-frame]').length).toBe(0)
+    // Without a ratio the cell still has to say which group it is, so the frame
+    // carries the badge effect rather than disappearing along with the ratio.
+    expect(container.querySelectorAll('[data-auto-group-frame]').length).toBe(1)
     expect(
       container.querySelectorAll('[data-auto-group-flow-border]').length
-    ).toBe(0)
+    ).toBe(1)
     expect(container.querySelector('[data-auto-group-effect="ratio"]')).toBe(
       null
     )
+    expect(
+      container.querySelector('[data-auto-group-effect="badge"]')
+    ).not.toBeNull()
     expect(container).toHaveTextContent('Cross-group')
-    expect(container).not.toHaveTextContent('Auto')
+    expect(container).toHaveTextContent('Auto')
     expect(container).not.toHaveTextContent('Ratio')
   })
 

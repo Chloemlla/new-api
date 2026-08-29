@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
 import type { UserGroup } from '../../types'
 import {
@@ -39,19 +38,19 @@ const validValues = {
 
 describe('groupFormSchema', () => {
   test('accepts a valid group', () => {
-    assert.equal(groupFormSchema.safeParse(validValues).success, true)
+    expect(groupFormSchema.safeParse(validValues).success).toBe(true)
   })
 
   test('rejects empty or special-character group names', () => {
     for (const name of ['', 'my group', 'vip:2', 'a,b', 'x"y']) {
       const result = groupFormSchema.safeParse({ ...validValues, name })
-      assert.equal(result.success, false, `expected "${name}" to be rejected`)
+      expect(result.success, `expected "${name}" to be rejected`).toBe(false)
     }
   })
 
   test('rejects negative base ratios', () => {
     const result = groupFormSchema.safeParse({ ...validValues, ratio: -1 })
-    assert.equal(result.success, false)
+    expect(result.success).toBe(false)
   })
 
   test('rejects out-of-range rate limit values when enabled', () => {
@@ -61,7 +60,7 @@ describe('groupFormSchema', () => {
       maxRequests: -1,
       maxSuccess: 0,
     })
-    assert.equal(result.success, false)
+    expect(result.success).toBe(false)
   })
 
   test('accepts zero total requests when the rate limit is enabled', () => {
@@ -71,28 +70,26 @@ describe('groupFormSchema', () => {
       maxRequests: 0,
       maxSuccess: 100,
     })
-    assert.equal(result.success, true)
+    expect(result.success).toBe(true)
   })
 })
 
 describe('formValuesToRateLimit', () => {
   test('returns null when the rate limit is disabled', () => {
-    assert.equal(
-      formValuesToRateLimit({ ...validValues, rateLimitEnabled: false }),
-      null
-    )
+    expect(
+      formValuesToRateLimit({ ...validValues, rateLimitEnabled: false })
+    ).toBe(null)
   })
 
   test('returns the configured limits when enabled', () => {
-    assert.deepEqual(
+    expect(
       formValuesToRateLimit({
         ...validValues,
         rateLimitEnabled: true,
         maxRequests: 200,
         maxSuccess: 100,
-      }),
-      { maxRequests: 200, maxSuccess: 100 }
-    )
+      })
+    ).toEqual({ maxRequests: 200, maxSuccess: 100 })
   })
 })
 
@@ -109,12 +106,12 @@ describe('groupToFormValues', () => {
     }
 
     const values = groupToFormValues(group)
-    assert.equal(values.name, 'vip')
-    assert.equal(values.ratio, 0.8)
-    assert.equal(values.topupRatio, '1.2')
-    assert.equal(values.rateLimitEnabled, true)
-    assert.equal(values.maxRequests, 100)
-    assert.equal(values.maxSuccess, 50)
+    expect(values.name).toBe('vip')
+    expect(values.ratio).toBe(0.8)
+    expect(values.topupRatio).toBe('1.2')
+    expect(values.rateLimitEnabled).toBe(true)
+    expect(values.maxRequests).toBe(100)
+    expect(values.maxSuccess).toBe(50)
   })
 
   test('maps a group without a rate limit to the disabled defaults', () => {
@@ -128,8 +125,8 @@ describe('groupToFormValues', () => {
       modelCount: 0,
     })
 
-    assert.equal(values.rateLimitEnabled, false)
-    assert.equal(values.maxRequests, 0)
-    assert.equal(values.maxSuccess, 1)
+    expect(values.rateLimitEnabled).toBe(false)
+    expect(values.maxRequests).toBe(0)
+    expect(values.maxSuccess).toBe(1)
   })
 })

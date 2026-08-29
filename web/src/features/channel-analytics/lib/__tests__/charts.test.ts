@@ -16,11 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
+import { describe, expect, test } from 'vitest'
 
-import type { ChannelQuotaDataItem } from '../types'
-import { processChannelChartData } from './charts'
+import type { ChannelQuotaDataItem } from '../../types'
+import { processChannelChartData } from '../charts'
 
 const rows: ChannelQuotaDataItem[] = [
   // Channel "east": 150 quota / 3 requests across two hours.
@@ -77,14 +76,14 @@ describe('processChannelChartData', () => {
     const result = processChannelChartData(rows, 'day', 10, (key) => key)
 
     // Cost trend: one time bucket with every channel as its own series.
-    assert.deepEqual(costRows(result), [
+    expect(costRows(result)).toEqual([
       { Channel: 'east', rawQuota: 150 },
       { Channel: 'west', rawQuota: 25 },
       { Channel: 'north', rawQuota: 10 },
     ])
     // Request trend keeps the same bucket but the request counts, sorted by
     // volume descending so the busiest channel reads first.
-    assert.deepEqual(requestRows(result), [
+    expect(requestRows(result)).toEqual([
       { Channel: 'north', Count: 100 },
       { Channel: 'east', Count: 3 },
       { Channel: 'west', Count: 3 },
@@ -92,51 +91,49 @@ describe('processChannelChartData', () => {
     // Cost ranking is sorted by total cost, descending.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const costRank = result.spec_cost_rank.data[0].values as any[]
-    assert.deepEqual(
-      costRank.map((v) => v.Channel),
-      ['east', 'west', 'north']
-    )
+    expect(costRank.map((v) => v.Channel)).toEqual(['east', 'west', 'north'])
     // Request ranking is sorted by total requests, descending.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const requestRank = result.spec_request_rank.data[0].values as any[]
-    assert.equal(requestRank[0].Channel, 'north')
-    assert.equal(requestRank[0].Count, 100)
+    expect(requestRank[0].Channel).toBe('north')
+    expect(requestRank[0].Count).toBe(100)
     // Totals combine every channel.
-    assert.equal(result.totalCountDisplay, '106')
+    expect(result.totalCountDisplay).toBe('106')
   })
 
   test('buckets channels below the display limit into Other channels', () => {
     const result = processChannelChartData(rows, 'day', 2, (key) => key)
 
-    assert.deepEqual(costRows(result), [
+    expect(costRows(result)).toEqual([
       { Channel: 'east', rawQuota: 150 },
       { Channel: 'west', rawQuota: 25 },
       { Channel: 'Other channels', rawQuota: 10 },
     ])
     // Request trend ranks by requests, so "north" is in the top two and
     // "west" falls into the Other bucket instead.
-    assert.deepEqual(requestRows(result), [
+    expect(requestRows(result)).toEqual([
       { Channel: 'north', Count: 100 },
       { Channel: 'east', Count: 3 },
       { Channel: 'Other channels', Count: 3 },
     ])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const costRank = result.spec_cost_rank.data[0].values as any[]
-    assert.deepEqual(
-      costRank.map((v) => v.Channel),
-      ['east', 'west', 'Other channels']
-    )
-    assert.equal(costRank[2].rawQuota, 10)
+    expect(costRank.map((v) => v.Channel)).toEqual([
+      'east',
+      'west',
+      'Other channels',
+    ])
+    expect(costRank[2].rawQuota).toBe(10)
   })
 
   test('returns empty specs for no data', () => {
     const result = processChannelChartData([], 'day', 10, (key) => key)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    assert.deepEqual(result.spec_cost_trend.data[0].values as any[], [])
+    expect(result.spec_cost_trend.data[0].values as any[]).toEqual([])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    assert.deepEqual(result.spec_request_rank.data[0].values as any[], [])
-    assert.equal(result.totalCountDisplay, '0')
-    assert.equal(result.totalTokenDisplay, '0')
+    expect(result.spec_request_rank.data[0].values as any[]).toEqual([])
+    expect(result.totalCountDisplay).toBe('0')
+    expect(result.totalTokenDisplay).toBe('0')
   })
 
   test('falls back to a generated label when a channel has no name', () => {
@@ -147,9 +144,6 @@ describe('processChannelChartData', () => {
     const result = processChannelChartData(unnamedRows, 'day', 10, (key) => key)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const costRank = result.spec_cost_rank.data[0].values as any[]
-    assert.deepEqual(
-      costRank.map((v) => v.Channel),
-      ['channel-7', 'Unknown']
-    )
+    expect(costRank.map((v) => v.Channel)).toEqual(['channel-7', 'Unknown'])
   })
 })
