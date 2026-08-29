@@ -92,14 +92,14 @@ type User struct {
 	TelegramId       string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
 	VerificationCode string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
 	AccessToken      *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota            int                        `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota        int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount     int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Quota            int                        `json:"quota" gorm:"type:bigint;default:0"`
+	UsedQuota        int                        `json:"used_quota" gorm:"type:bigint;default:0;column:used_quota"` // used quota
+	RequestCount     int                        `json:"request_count" gorm:"type:int;default:0;"`                  // request number
 	Group            string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
 	AffCode          string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	AffCount         int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota         int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota  int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	AffQuota         int                        `json:"aff_quota" gorm:"type:bigint;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota  int                        `json:"aff_history_quota" gorm:"type:bigint;default:0;column:aff_history"` // 邀请历史额度
 	InviterId        int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DeletedAt        gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId        string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
@@ -1301,25 +1301,53 @@ func IncreaseUserQuota(id int, quota int, db bool) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
+	if err := common.ValidateWalletQuota(quota); err != nil {
+		return err
+	}
+	if !db && common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
+		gopool.Go(func() {
+			if err := cacheIncrUserQuota(id, int64(quota)); err != nil {
+				common.SysLog("failed to increase user quota: " + err.Error())
+			}
+		})
+		return nil
+	}
+	if err := increaseUserQuota(id, quota); err != nil {
+		return err
+	}
 	gopool.Go(func() {
-		err := cacheIncrUserQuota(id, int64(quota))
-		if err != nil {
+		if err := cacheIncrUserQuota(id, int64(quota)); err != nil {
 			common.SysLog("failed to increase user quota: " + err.Error())
 		}
 	})
-	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
-		return nil
-	}
-	return increaseUserQuota(id, quota)
+	return nil
 }
 
 func increaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
-	if err != nil {
+	// A zero increment leaves the row byte-identical, and MySQL reports
+	// RowsAffected == 0 for that unless clientFoundRows is set (it is not).
+	// Without this guard the miss would be misread as hitting the wallet cap.
+	if quota == 0 {
+		return nil
+	}
+	result := DB.Model(&User{}).
+		Where("id = ? AND quota <= ?", id, common.MaxWalletQuota-quota).
+		Update("quota", gorm.Expr("quota + ?", quota))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	var count int64
+	if err := DB.Model(&User{}).Where("id = ?", id).Count(&count).Error; err != nil {
 		return err
 	}
-	return err
+	if count == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return ErrWalletQuotaLimitExceeded
 }
 
 func DecreaseUserQuota(id int, quota int, db bool) (err error) {
@@ -1417,15 +1445,42 @@ func updateUserQuotaUsedQuotaAndRequestCount(id int, quota int, usedQuota int, r
 		return
 	}
 
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
+	tx := DB.Model(&User{}).Where("id = ?", id)
+	// A batched credit must respect the same wallet ceiling as the direct
+	// path, otherwise accumulating deltas can push the balance past it.
+	// Debits (negative deltas) can never overflow, so they stay unguarded.
+	if quota > 0 {
+		tx = tx.Where("quota <= ?", common.MaxWalletQuota-quota)
+	}
+	result := tx.Updates(
 		map[string]interface{}{
 			"quota":         gorm.Expr("quota + ?", quota),
 			"used_quota":    gorm.Expr("used_quota + ?", usedQuota),
 			"request_count": gorm.Expr("request_count + ?", requestCount),
 		},
-	).Error
-	if err != nil {
-		common.SysLog("failed to batch update user quota, used quota and request count: " + err.Error())
+	)
+	if result.Error != nil {
+		common.SysLog("failed to batch update user quota, used quota and request count: " + result.Error.Error())
+		return
+	}
+	if quota <= 0 || result.RowsAffected == 1 {
+		return
+	}
+
+	// The guarded update matched nothing: either the wallet cap would have been
+	// exceeded or the user is gone. Usage columns must still advance so the
+	// batch does not silently discard recorded consumption.
+	common.SysError(fmt.Sprintf("batch quota credit %d for user %d not applied (wallet cap %d or missing user)", quota, id, common.MaxWalletQuota))
+	if usedQuota == 0 && requestCount == 0 {
+		return
+	}
+	if err := DB.Model(&User{}).Where("id = ?", id).Updates(
+		map[string]interface{}{
+			"used_quota":    gorm.Expr("used_quota + ?", usedQuota),
+			"request_count": gorm.Expr("request_count + ?", requestCount),
+		},
+	).Error; err != nil {
+		common.SysLog("failed to batch update user used quota and request count: " + err.Error())
 	}
 }
 

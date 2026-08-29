@@ -194,6 +194,9 @@ func InitDB() (err error) {
 				panic(err)
 			}
 		}
+		if err := ensureUserQuotaColumns(DB, common.MainDatabaseType()); err != nil {
+			return err
+		}
 		sqlDB, err := DB.DB()
 		if err != nil {
 			return err
@@ -256,6 +259,66 @@ func InitLogDB() (err error) {
 		common.FatalLog(err)
 	}
 	return err
+}
+
+// quotaColumnsByTable lists every column that may hold a value up to
+// common.MaxWalletQuota. Tokens and redemptions are included because their
+// write ceilings are also wallet-scoped (maxTokenQuota, ValidateWalletQuota),
+// so a legacy 32-bit column there overflows just like users.quota would.
+var quotaColumnsByTable = []struct {
+	table   string
+	model   any
+	columns []string
+}{
+	{"users", &User{}, []string{"quota", "used_quota", "aff_quota", "aff_history"}},
+	{"tokens", &Token{}, []string{"remain_quota", "used_quota"}},
+	{"redemptions", &Redemption{}, []string{"quota"}},
+}
+
+// ensureUserQuotaColumns rejects a legacy 32-bit wallet schema before any
+// migrations run. The 64-bit-only build intentionally does not auto-upgrade
+// an existing wallet; operators must migrate it explicitly before starting.
+func ensureUserQuotaColumns(db *gorm.DB, dbType common.DatabaseType) error {
+	if common.GetEnvOrDefaultBool("SKIP_64BIT_QUOTA_SCHEMA_CHECK", false) {
+		common.SysLog("SKIP_64BIT_QUOTA_SCHEMA_CHECK=true; skipping user quota schema check")
+		return nil
+	}
+	if db == nil || dbType == common.DatabaseTypeSQLite {
+		return nil
+	}
+	for _, target := range quotaColumnsByTable {
+		if !db.Migrator().HasTable(target.model) {
+			continue
+		}
+		columnTypes, err := db.Migrator().ColumnTypes(target.model)
+		if err != nil {
+			return fmt.Errorf("failed to inspect %s schema: %w", target.table, err)
+		}
+		for _, expected := range target.columns {
+			for _, actual := range columnTypes {
+				if !strings.EqualFold(actual.Name(), expected) {
+					continue
+				}
+				dataType := actual.DatabaseTypeName()
+				if !is64BitIntegerType(dbType, dataType) {
+					return fmt.Errorf("%s.%s uses %s; 32-bit is not supported", target.table, expected, dataType)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func is64BitIntegerType(dbType common.DatabaseType, dataType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(dataType))
+	switch dbType {
+	case common.DatabaseTypeMySQL:
+		return normalized == "bigint" || normalized == "unsigned bigint" || normalized == "bigint unsigned"
+	case common.DatabaseTypePostgreSQL:
+		return normalized == "bigint" || normalized == "int8"
+	default:
+		return false
+	}
 }
 
 func migrateDB() error {
