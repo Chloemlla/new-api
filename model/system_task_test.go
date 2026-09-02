@@ -353,8 +353,8 @@ func TestSystemTaskUpdatesRequireUnexpiredLock(t *testing.T) {
 
 func TestUpdateSystemTaskStateIdenticalPayloadDoesNotLoseLock(t *testing.T) {
 	// SQLite reports matched rows for unchanged UPDATEs, so this case passed
-	// even before the fix. The MySQL regression is covered by
-	// TestUpdateSystemTaskStateIdenticalPayloadDoesNotLoseLockConfiguredDatabases.
+	// even before the fix. The MySQL RowsAffected == 0 branch has no automated
+	// coverage: reaching it needs a real MySQL instance, which CI does not run.
 	truncateTables(t)
 	runUpdateSystemTaskStateIdenticalPayloadKeepsLock(t, SystemTaskTypeLogCleanup)
 }

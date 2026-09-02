@@ -111,7 +111,15 @@ func InitEnv() {
 	BatchUpdateInterval = GetEnvOrDefault("BATCH_UPDATE_INTERVAL", 5)
 	RelayTimeout = GetEnvOrDefault("RELAY_TIMEOUT", 0)
 	RelayIdleConnTimeout = GetEnvOrDefault("RELAY_IDLE_CONN_TIMEOUT", 90)
-	RelayResponseHeaderTimeout = GetEnvOrDefault("RELAY_RESPONSE_HEADER_TIMEOUT", 1800)
+	const defaultRelayResponseHeaderTimeout = 1800
+	RelayResponseHeaderTimeout = GetEnvOrDefault("RELAY_RESPONSE_HEADER_TIMEOUT", defaultRelayResponseHeaderTimeout)
+	if RelayResponseHeaderTimeout < 0 {
+		// service/http_client.go only arms the response-header wait for values > 0,
+		// so a negative setting would silently disable the protection that only 0
+		// is documented to disable.
+		log.Printf("WARNING: RELAY_RESPONSE_HEADER_TIMEOUT=%d is negative, falling back to %d seconds.", RelayResponseHeaderTimeout, defaultRelayResponseHeaderTimeout)
+		RelayResponseHeaderTimeout = defaultRelayResponseHeaderTimeout
+	}
 	RelayMaxIdleConns = GetEnvOrDefault("RELAY_MAX_IDLE_CONNS", 500)
 	RelayMaxIdleConnsPerHost = GetEnvOrDefault("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)
 

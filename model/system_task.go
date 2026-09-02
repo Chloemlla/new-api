@@ -357,7 +357,20 @@ func RenewSystemTaskLock(taskID string, lockedBy string, lockUntil int64) error 
 	if result.Error != nil {
 		return result.Error
 	}
-	if result.RowsAffected == 0 {
+	if result.RowsAffected > 0 {
+		return nil
+	}
+	// MySQL counts changed rows, not matched rows. A heartbeat that renews with
+	// the same lockUntil inside the same second therefore returns
+	// RowsAffected == 0 while the lease is still held. Confirm the lock with the
+	// same predicate before treating this as loss, as UpdateSystemTaskState does.
+	var held int64
+	if err := DB.Model(&SystemTaskLock{}).
+		Where("task_id = ? AND locked_by = ? AND locked_until >= ?", taskID, lockedBy, now).
+		Count(&held).Error; err != nil {
+		return err
+	}
+	if held == 0 {
 		return ErrSystemTaskLockLost
 	}
 	return nil
