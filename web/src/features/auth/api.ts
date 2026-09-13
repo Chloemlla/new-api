@@ -23,9 +23,7 @@ import { AuthOperationError } from '@/lib/secure-verification'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
-import {
-  encryptPassword,
-} from './lib/password-encryption'
+import { encryptPassword } from './lib/password-encryption'
 import { getAffiliateCode } from './lib/storage'
 import type { TelegramAuthorization } from './lib/telegram-login'
 import type { VerificationOperation } from './secure-verification/types'

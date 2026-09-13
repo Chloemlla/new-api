@@ -381,12 +381,16 @@ func TestSecurityLoginAllPrimaryTransportsRequireAdditionalVerification(t *testi
 					oauth.Register(slug, &boundLoginOAuthProvider{userID: user.Id})
 				}
 				t.Cleanup(func() { oauth.Unregister(slug) })
-				token, _, err := model.CreateAuthFlow(model.AuthFlowCreate{Purpose: model.AuthFlowPurposeOAuth, Provider: slug, Intent: model.AuthFlowIntentLogin, Payload: `{}`, ExpiresAt: time.Now().Add(time.Minute)})
+				payloadBytes, err := common.Marshal(oauthFlowPayload{BrowserToken: "unified-login-browser"})
+				require.NoError(t, err)
+				token, _, err := model.CreateAuthFlow(model.AuthFlowCreate{Purpose: model.AuthFlowPurposeOAuth, Provider: slug, Intent: model.AuthFlowIntentLogin, Payload: string(payloadBytes), ExpiresAt: time.Now().Add(time.Minute)})
 				require.NoError(t, err)
 				router := gin.New()
 				router.GET("/api/oauth/:provider", HandleOAuth)
 				response = httptest.NewRecorder()
-				router.ServeHTTP(response, httptest.NewRequest("GET", "/api/oauth/"+slug+"?state="+token+"&code=provider-code", nil))
+				request := httptest.NewRequest("GET", "/api/oauth/"+slug+"?state="+token+"&code=provider-code", nil)
+				request.AddCookie(&http.Cookie{Name: oauthBrowserFlowCookie, Value: "unified-login-browser"})
+				router.ServeHTTP(response, request)
 			}
 			var result struct {
 				Success bool                   `json:"success"`

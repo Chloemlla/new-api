@@ -33,10 +33,7 @@ import { useAuthStore, type AuthBundle } from '@/stores/auth-store'
 
 import { createOAuthFlow } from '../../api'
 import { OAUTH_POPUP_CALLBACK_MESSAGE } from '../../constants'
-import {
-  clearPasswordEncryptionCache,
-  encryptPassword,
-} from '../../lib/password-encryption'
+import { encryptPassword } from '../../lib/password-encryption'
 import { checkVerificationMethods, verify } from '../api'
 import type { SecurityProof } from '../types'
 
@@ -201,7 +198,6 @@ function mockRefreshResponse(bundle: AuthBundle, onRequest?: () => void) {
 }
 
 afterEach(() => {
-  clearPasswordEncryptionCache()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   api.defaults.adapter = originalAdapter

@@ -168,6 +168,11 @@ func (fixture *telegramOAuthFixture) authorization(t *testing.T, intent string, 
 		URL   string `json:"authorization_url"`
 	}
 	require.NoError(t, common.Unmarshal(body.Data, &data))
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == oauthBrowserFlowCookie {
+			telegramBrowserCookies.Store(data.State, cookie.Value)
+		}
+	}
 	authorizationURL, err := url.Parse(data.URL)
 	require.NoError(t, err)
 	assert.Equal(t, "https://oauth.telegram.org/auth", authorizationURL.Scheme+"://"+authorizationURL.Host+authorizationURL.Path)
@@ -191,12 +196,22 @@ func telegramIdentityClaims(id any) jwt.MapClaims {
 	}
 }
 
+// telegramBrowserCookies remembers the browser-binding cookie that the OAuth
+// state endpoint issued for a flow, so callbacks replay it the way a browser
+// would. A login-intent flow is bound to the browser that started it, so a
+// callback without the matching cookie is rejected as a login-CSRF attempt.
+var telegramBrowserCookies sync.Map
+
 func telegramOAuthCallback(state, code string, identity service.AuthIdentity) *httptest.ResponseRecorder {
 	path := "/api/oauth/telegram?" + url.Values{"state": {state}, "code": {code}}.Encode()
+	var cookies []*http.Cookie
+	if value, ok := telegramBrowserCookies.Load(state); ok {
+		cookies = append(cookies, &http.Cookie{Name: oauthBrowserFlowCookie, Value: value.(string)})
+	}
 	return securityEnrollmentRequest("GET", path, "", "", identity, func(c *gin.Context) {
 		c.Params = gin.Params{{Key: "provider", Value: "telegram"}}
 		HandleOAuth(c)
-	})
+	}, cookies...)
 }
 
 func TestTelegramOAuthPreservesExistingAccountAndBinding(t *testing.T) {

@@ -102,12 +102,15 @@ func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentit
 	return user, identity
 }
 
-func securityEnrollmentRequest(method, path, body, proof string, identity service.AuthIdentity, handler gin.HandlerFunc) *httptest.ResponseRecorder {
+func securityEnrollmentRequest(method, path, body, proof string, identity service.AuthIdentity, handler gin.HandlerFunc, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	response := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(response)
 	c.Request = httptest.NewRequest(method, path, strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Request.Header.Set("X-Security-Proof", proof)
+	for _, cookie := range cookies {
+		c.Request.AddCookie(cookie)
+	}
 	c.Set("id", identity.UserID)
 	c.Set("role", common.RoleCommonUser)
 	c.Set("session_id", identity.SessionID)
