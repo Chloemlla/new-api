@@ -83,4 +83,9 @@ n	// ContextKeyHeldChannelLoad records which channel the current request holds
 	// ContextKeyRequestPriority stores the request priority level for
 	// load shedding and degradation decisions.
 	ContextKeyRequestPriority ContextKey = "request_priority"
+
+	// ContextKeyTokenAuditParams contains only the API token operation's safe metadata.
+	ContextKeyTokenAuditParams ContextKey = "token_audit_params"
+	// ContextKeyTokenAuditSucceeded disambiguates token responses that exceed the audit buffer.
+	ContextKeyTokenAuditSucceeded ContextKey = "token_audit_succeeded"
 )

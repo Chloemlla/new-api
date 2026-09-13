@@ -49,7 +49,8 @@ export async function encryptPassword(
   try {
     ciphertext = await rsaOaepEncrypt(
       JSON.stringify({ nonce: key.nonce, password }),
-      key.public_key
+      key.public_key,
+      key.kid
     )
   } catch (error: unknown) {
     throw new Error(t('Login failed'), { cause: error })
@@ -79,7 +80,8 @@ async function getPasswordEncryptionKey(): Promise<PasswordEncryptionKey> {
 
 async function rsaOaepEncrypt(
   plaintext: string,
-  publicKeyPEM: string
+  publicKeyPEM: string,
+  keyId: string
 ): Promise<string> {
   if (typeof globalThis.crypto?.subtle !== 'undefined') {
     try {
@@ -90,10 +92,48 @@ async function rsaOaepEncrypt(
         false,
         ['encrypt']
       )
+      const bytes = new TextEncoder().encode(plaintext)
+      const algorithm = publicKey.algorithm as RsaHashedKeyAlgorithm
+      if (bytes.byteLength > algorithm.modulusLength / 8 - 66) {
+        const secret = globalThis.crypto.getRandomValues(new Uint8Array(32))
+        const nonce = globalThis.crypto.getRandomValues(new Uint8Array(12))
+        const key = await globalThis.crypto.subtle.importKey(
+          'raw',
+          secret,
+          'AES-GCM',
+          false,
+          ['encrypt']
+        )
+        const [wrappedKey, ciphertext] = await Promise.all([
+          globalThis.crypto.subtle.encrypt(
+            {
+              name: 'RSA-OAEP',
+              label: new TextEncoder().encode('password-v2'),
+            },
+            publicKey,
+            secret
+          ),
+          globalThis.crypto.subtle.encrypt(
+            {
+              name: 'AES-GCM',
+              iv: nonce,
+              additionalData: new TextEncoder().encode(`password-v2:${keyId}`),
+            },
+            key,
+            bytes
+          ),
+        ])
+        return [
+          'v2',
+          arrayBufferToBase64(wrappedKey),
+          arrayBufferToBase64(nonce.buffer),
+          arrayBufferToBase64(ciphertext),
+        ].join('.')
+      }
       const ciphertext = await globalThis.crypto.subtle.encrypt(
         { name: 'RSA-OAEP' },
         publicKey,
-        new TextEncoder().encode(plaintext)
+        bytes
       )
       return arrayBufferToBase64(ciphertext)
     } catch {
@@ -106,11 +146,33 @@ async function rsaOaepEncrypt(
   // forge keeps the normal HTTPS bundle small while supporting HTTP intranets.
   const forge = await import('node-forge')
   const publicKey = forge.pki.publicKeyFromPem(publicKeyPEM)
-  const ciphertext = publicKey.encrypt(
-    forge.util.encodeUtf8(plaintext),
-    'RSA-OAEP',
-    { md: forge.md.sha256.create() }
-  )
+  const bytes = forge.util.encodeUtf8(plaintext)
+  if (bytes.length > publicKey.n.bitLength() / 8 - 66) {
+    const secret = forge.random.getBytesSync(32)
+    const nonce = forge.random.getBytesSync(12)
+    const wrappedKey = publicKey.encrypt(secret, 'RSA-OAEP', {
+      md: forge.md.sha256.create(),
+      label: 'password-v2',
+    })
+    const cipher = forge.cipher.createCipher('AES-GCM', secret)
+    cipher.start({
+      iv: nonce,
+      additionalData: `password-v2:${keyId}`,
+      tagLength: 128,
+    })
+    cipher.update(forge.util.createBuffer(bytes))
+    if (!cipher.finish()) throw new Error('Password encryption failed')
+    const ciphertext = cipher.output.getBytes() + cipher.mode.tag.getBytes()
+    return [
+      'v2',
+      forge.util.encode64(wrappedKey),
+      forge.util.encode64(nonce),
+      forge.util.encode64(ciphertext),
+    ].join('.')
+  }
+  const ciphertext = publicKey.encrypt(bytes, 'RSA-OAEP', {
+    md: forge.md.sha256.create(),
+  })
   return forge.util.encode64(ciphertext)
 }
 

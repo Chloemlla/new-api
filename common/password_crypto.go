@@ -1,6 +1,8 @@
 package common
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -18,6 +20,12 @@ import (
 const (
 	passwordEncryptionKeyBits  = 2048
 	passwordEncryptionNonceTTL = 5 * time.Minute
+
+	// passwordEncryptionV2MaxBytes bounds the AES-GCM ciphertext of a v2
+	// payload. The GCM plaintext is the JSON envelope, so the bound covers the
+	// worst-case escaping of the password (six bytes per character), the
+	// 64-character nonce, the JSON syntax and the 16-byte GCM tag.
+	passwordEncryptionV2MaxBytes = MaxAccountPasswordLength*6 + 128
 )
 
 var ErrPasswordEncryptionInvalid = errors.New("password encryption payload is invalid")
@@ -104,11 +112,14 @@ func PasswordEncryptionPublicKey() (keyID string, publicKeyPEM string) {
 	return passwordEncryptionState.keyID, passwordEncryptionState.publicKey
 }
 
-// DecryptPassword decrypts a base64 RSA-OAEP/SHA-256 password submitted by a
-// browser. The plaintext must be a passwordEncryptionPayload whose nonce is
-// issued by this server and has not already been consumed; otherwise the
-// ciphertext is treated as invalid. All malformed inputs share one error so
-// callers do not expose cryptographic details to unauthenticated clients.
+// DecryptPassword decrypts a base64 password ciphertext submitted by a browser.
+// Legacy ciphertexts are raw RSA-OAEP/SHA-256, while v2 ciphertexts wrap a fresh
+// AES-256 key with RSA-OAEP and carry the password with GCM so long Unicode
+// passwords work with the existing 2048-bit server key. Both formats carry the
+// same plaintext: a passwordEncryptionPayload whose nonce is issued by this
+// server and has not already been consumed; anything else is treated as invalid.
+// All malformed inputs share one error so callers do not expose cryptographic
+// details to unauthenticated clients.
 func DecryptPassword(ciphertextBase64 string, keyID string) (string, error) {
 	passwordEncryptionState.RLock()
 	privateKey := passwordEncryptionState.privateKey
@@ -116,6 +127,44 @@ func DecryptPassword(ciphertextBase64 string, keyID string) (string, error) {
 	passwordEncryptionState.RUnlock()
 	if privateKey == nil || keyID == "" || keyID != activeKeyID {
 		return "", ErrPasswordEncryptionInvalid
+	}
+	if strings.HasPrefix(ciphertextBase64, "v2.") {
+		if len(ciphertextBase64) > 4096 {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		parts := strings.Split(ciphertextBase64, ".")
+		if len(parts) != 4 {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		wrappedKey, err := base64.StdEncoding.Strict().DecodeString(parts[1])
+		if err != nil || len(wrappedKey) != privateKey.Size() {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		nonce, err := base64.StdEncoding.Strict().DecodeString(parts[2])
+		if err != nil || len(nonce) != 12 {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		ciphertext, err := base64.StdEncoding.Strict().DecodeString(parts[3])
+		if err != nil || len(ciphertext) <= 16 || len(ciphertext) > passwordEncryptionV2MaxBytes {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		key, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, wrappedKey, []byte("password-v2"))
+		if err != nil || len(key) != 32 {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		plaintext, err := gcm.Open(nil, nonce, ciphertext, []byte("password-v2:"+keyID))
+		if err != nil {
+			return "", ErrPasswordEncryptionInvalid
+		}
+		return decodePasswordEncryptionPayload(plaintext, keyID)
 	}
 	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextBase64)
 	if err != nil || len(ciphertext) != privateKey.Size() {
@@ -125,6 +174,13 @@ func DecryptPassword(ciphertextBase64 string, keyID string) (string, error) {
 	if err != nil || len(plaintext) == 0 {
 		return "", ErrPasswordEncryptionInvalid
 	}
+	return decodePasswordEncryptionPayload(plaintext, keyID)
+}
+
+// decodePasswordEncryptionPayload validates a decrypted envelope and consumes
+// its one-time nonce. Unknown, expired, replayed and malformed payloads are all
+// reported as one error so callers do not learn why a login attempt failed.
+func decodePasswordEncryptionPayload(plaintext []byte, keyID string) (string, error) {
 	var payload passwordEncryptionPayload
 	if err := Unmarshal(plaintext, &payload); err != nil {
 		return "", ErrPasswordEncryptionInvalid
