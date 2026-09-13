@@ -37,6 +37,10 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     clearMocks: true,
     restoreMocks: true,
+    // CI runners have two vCPUs while the suite runs every file in parallel, so
+    // a slow worker can push a real DOM interaction past the 5s default. No
+    // assertion changes; only the budget a test may take grows.
+    testTimeout: 15000,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 })
