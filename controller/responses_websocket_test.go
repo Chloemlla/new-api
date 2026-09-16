@@ -227,7 +227,9 @@ func TestResponsesWSRequestRunnerUsesExistingMemoryRateLimit(t *testing.T) {
 	apiError := runner(httptest.NewRequest(http.MethodPost, "/v1/responses", nil), "limited", handle)
 	require.NotNil(t, apiError)
 	assert.Equal(t, http.StatusTooManyRequests, apiError.StatusCode)
-	assert.Equal(t, http.StatusText(http.StatusTooManyRequests), apiError.Error())
+	// The in-memory limiter answers with the localized limit message plus the
+	// request id, not with a bare status text.
+	assert.Equal(t, "您已达到总请求数限制：1分钟内最多请求1次，包括失败次数，请检查您的请求是否正确 (request id: limited)", apiError.Error())
 	assert.Equal(t, 1, called)
 }
 
