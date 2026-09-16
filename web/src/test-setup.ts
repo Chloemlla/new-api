@@ -22,9 +22,10 @@ import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { afterEach, beforeAll } from 'vitest'
 
-// `findBy*` resolves as soon as the node is committed, and `waitFor` polls the
-// DOM. The 1s default is too tight for a loaded CI worker, which reports a
-// missing element for markup that is present. Keep it below `testTimeout`.
+// The testing-library default of 1000ms for findBy*/waitFor is too tight for
+// this suite on contended CI runners, where a first-in-file test also pays the
+// full cold-render cost. Keep it below vitest's testTimeout so async lookup
+// failures still report the missing element instead of a generic test timeout.
 configure({ asyncUtilTimeout: 5000 })
 
 beforeAll(async () => {
@@ -43,10 +44,18 @@ afterEach(() => {
   cleanup()
 })
 
+// Prefer reduced motion in tests: entrance animations write inline
+// `opacity: 0` on their first frame, and jsdom advances frames through a
+// setTimeout-based rAF shim, so jest-dom visibility assertions would race the
+// animation. The reduced-motion code paths render the same DOM without
+// transient hidden states. Both `(prefers-reduced-motion: reduce)` and the
+// boolean `(prefers-reduced-motion)` form match; `no-preference` does not.
 Object.defineProperty(window, 'matchMedia', {
   configurable: true,
   value: (query: string): MediaQueryList => ({
-    matches: false,
+    matches:
+      query.includes('prefers-reduced-motion') &&
+      !query.includes('no-preference'),
     media: query,
     onchange: null,
     addListener: () => undefined,
