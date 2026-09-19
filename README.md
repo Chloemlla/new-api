@@ -44,6 +44,7 @@
 </p>
 
 <p align="center">
+  <a href="#fork-enhancements">Fork Enhancements</a> •
   <a href="#capabilities">Capabilities</a> •
   <a href="#quick-start">Quick start</a> •
   <a href="#deployment">Deployment</a> •
@@ -52,6 +53,53 @@
 </p>
 
 </div>
+
+---
+
+<a id="fork-enhancements"></a>
+
+## ⚡ This Fork's Enhancements
+
+This fork builds on upstream New API. Everything upstream documents still works; on top of it this fork adds and hardens the following.
+
+| Feature | Description |
+|---------|-------------|
+| 🔀 **Sharded Rate Limiter** | 64-shard FNV-1a concurrent rate limiter — eliminates lock contention under high concurrency |
+| 🧵 **Bounded Goroutine Pool** | Goroutine pool capped at 20,000 to prevent OOM under extreme load |
+| 🔌 **Larger Redis Pool** | Default connection pool increased from 10 to 50 for high-throughput scenarios |
+| 📊 **Adaptive Rate Limiting** | Dynamically adjusts request limits based on real-time CPU and memory usage |
+| 🚦 **Request Queue & Backpressure** | Priority-ordered request queue with configurable concurrency cap and timeout |
+| 🩺 **Channel Health Probes** | Background probe pings enabled channels every N seconds; auto-disables after 3 consecutive failures |
+| ⛓️ **Circuit Breaker** | Three-state machine (Closed → Open → Half-Open) per channel; prevents cascading failures |
+| ⚖️ **Load-Aware Channel Selection** | Prefers channels with fewer in-flight requests when selecting among same-priority candidates |
+| 🎯 **Request Priority & Degradation** | Classifies requests by user role (admin/premium/basic/free); sheds low-priority traffic under load |
+| 🔍 **Distributed Tracing** | Generates trace IDs and records per-stage timing (auth, rate-limit, distribution, relay, billing) |
+| 🔄 **Traffic Mirroring** | Asynchronously copies a configurable ratio of requests to a secondary channel for validation |
+| 📈 **Performance Dashboard** | Real-time API endpoints for system health, circuit breaker states, in-flight requests, and channel health |
+| 📡 **Redis Support** | Distributed rate limiting via atomic Lua scripts; supports both Redis and in-memory modes |
+| 🩻 **Health Check Endpoint** | `GET /api/health` returns database status, CPU/memory usage, and uptime for load balancer probes |
+| 📈 **Prometheus Metrics** | `GET /api/performance/metrics` exposes Prometheus-format metrics for monitoring systems |
+| 🔄 **Config Hot-Reload** | `POST /api/option/reload` reloads all settings without restarting the server |
+| 📖 **API Documentation** | Built-in Swagger UI at `/api/docs` for exploring all API endpoints |
+| 👤 **Registration Approval** | Optional admin approval flow for new user registrations |
+| 💾 **Response Caching** | Middleware caches identical deterministic requests, bypassing upstream on hit |
+| 🔒 **Token IP Whitelist** | Per-token IP/CIDR whitelist enforced in all auth middleware paths |
+| 📊 **Channel Cost Analytics** | Per-channel cost and request volume statistics over time |
+| 📥 **Usage Data Export** | Download consume logs as CSV or JSON from the Usage Logs page |
+| 🐳 **Docker HEALTHCHECK** | Container health check via `GET /api/health` with configurable interval/timeout |
+| 🔔 **Alert Rules** | Configurable triggers (failure rate > X%, balance < Y) with webhook/email notifications |
+| 📋 **Pricing Import/Export** | Export/import model pricing configuration as JSON |
+| 👥 **User Group Management UI** | Admin page to view, create, edit user groups with model access and rate limits |
+| 📊 **Channel Cost Analytics UI** | Interactive charts showing per-channel cost and request volume over time |
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `REDIS_POOL_SIZE` | Redis connection pool size | `50` |
+| `PREMIUM_GROUPS` | Comma-separated group names treated as premium priority | `vip,premium,pro` |
+| `BASIC_GROUPS` | Comma-separated group names treated as basic priority | `basic,default` |
+| `MIRROR_REQUEST_TIMEOUT` | Timeout for mirrored requests in seconds | `30` |
 
 ---
 
@@ -145,47 +193,6 @@ Use it to share authorized model access across a team, switch providers without 
 [RelayKit](./relaykit/README.md) provides request, response, and streaming conversion between the four text protocols. Available features depend on the channel, upstream model, and conversion path; protocol-specific tools and fields may not map exactly. WebSocket support also requires a compatible upstream and channel configuration.
 
 This README describes the current source tree. Check the release notes for the version you deploy.
-
-### ⚡ Performance & Reliability
-
-| Feature | Description |
-|---------|-------------|
-| 🔀 **Sharded Rate Limiter** | 64-shard FNV-1a concurrent rate limiter — eliminates lock contention under high concurrency |
-| 🧵 **Bounded Goroutine Pool** | Goroutine pool capped at 20,000 to prevent OOM under extreme load |
-| 🔌 **Larger Redis Pool** | Default connection pool increased from 10 to 50 for high-throughput scenarios |
-| 📊 **Adaptive Rate Limiting** | Dynamically adjusts request limits based on real-time CPU and memory usage |
-| 🚦 **Request Queue & Backpressure** | Priority-ordered request queue with configurable concurrency cap and timeout |
-| 🩺 **Channel Health Probes** | Background probe pings enabled channels every N seconds; auto-disables after 3 consecutive failures |
-| ⛓️ **Circuit Breaker** | Three-state machine (Closed → Open → Half-Open) per channel; prevents cascading failures |
-| ⚖️ **Load-Aware Channel Selection** | Prefers channels with fewer in-flight requests when selecting among same-priority candidates |
-| 🎯 **Request Priority & Degradation** | Classifies requests by user role (admin/premium/basic/free); sheds low-priority traffic under load |
-| 🔍 **Distributed Tracing** | Generates trace IDs and records per-stage timing (auth, rate-limit, distribution, relay, billing) |
-| 🔄 **Traffic Mirroring** | Asynchronously copies a configurable ratio of requests to a secondary channel for validation |
-| 📈 **Performance Dashboard** | Real-time API endpoints for system health, circuit breaker states, in-flight requests, and channel health |
-| 📡 **Redis Support** | Distributed rate limiting via atomic Lua scripts; supports both Redis and in-memory modes |
-| 🩻 **Health Check Endpoint** | `GET /api/health` returns database status, CPU/memory usage, and uptime for load balancer probes |
-| 📈 **Prometheus Metrics** | `GET /api/performance/metrics` exposes Prometheus-format metrics for monitoring systems |
-| 🔄 **Config Hot-Reload** | `POST /api/option/reload` reloads all settings without restarting the server |
-| 📖 **API Documentation** | Built-in Swagger UI at `/api/docs` for exploring all API endpoints |
-| 👤 **Registration Approval** | Optional admin approval flow for new user registrations |
-| 💾 **Response Caching** | Middleware caches identical deterministic requests, bypassing upstream on hit |
-| 🔒 **Token IP Whitelist** | Per-token IP/CIDR whitelist enforced in all auth middleware paths |
-| 📊 **Channel Cost Analytics** | Per-channel cost and request volume statistics over time |
-| 📥 **Usage Data Export** | Download consume logs as CSV or JSON from the Usage Logs page |
-| 🐳 **Docker HEALTHCHECK** | Container health check via `GET /api/health` with configurable interval/timeout |
-| 🔔 **Alert Rules** | Configurable triggers (failure rate > X%, balance < Y) with webhook/email notifications |
-| 📋 **Pricing Import/Export** | Export/import model pricing configuration as JSON |
-| 👥 **User Group Management UI** | Admin page to view, create, edit user groups with model access and rate limits |
-| 📊 **Channel Cost Analytics UI** | Interactive charts showing per-channel cost and request volume over time |
-
-**Environment Variables:**
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `REDIS_POOL_SIZE` | Redis connection pool size | `50` |
-| `PREMIUM_GROUPS` | Comma-separated group names treated as premium priority | `vip,premium,pro` |
-| `BASIC_GROUPS` | Comma-separated group names treated as basic priority | `basic,default` |
-| `MIRROR_REQUEST_TIMEOUT` | Timeout for mirrored requests in seconds | `30` |
 
 <a id="quick-start"></a>
 
