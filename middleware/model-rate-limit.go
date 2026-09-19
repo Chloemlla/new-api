@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/common/limiter"
 	"github.com/QuantumNous/new-api/constant"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
@@ -210,7 +211,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 		c.Next()
 
 		// 5. 失败请求释放成功名额
-		if c.Writer.Status() >= 400 {
+		if !modelRequestSucceeded(c) {
 			if err := releaseRedisRateLimit(ctx, rdb, successKey, reservationToken); err != nil {
 				fmt.Println("释放成功请求数限制失败:", err.Error())
 			}
@@ -243,12 +244,17 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		c.Next()
 
 		// 4. 只有成功请求才保留成功名额。
-		if c.Writer.Status() < 400 {
+		if modelRequestSucceeded(c) {
 			reservation.Commit()
 		} else {
 			reservation.Rollback()
 		}
 	}
+}
+
+func modelRequestSucceeded(c *gin.Context) bool {
+	status, _ := common.GetContextKeyType[*relaycommon.StreamStatus](c, constant.ContextKeyResponseStreamStatus)
+	return c.Writer.Status() < 400 && !status.ResponseFailed()
 }
 
 // ModelRequestRateLimit 模型请求限流中间件
