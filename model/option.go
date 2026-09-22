@@ -64,7 +64,7 @@ func InitOptionMap() {
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
-common.OptionMap["ChannelCircuitBreakerEnabled"] = strconv.FormatBool(common.CircuitBreakerEnabled)
+	common.OptionMap["ChannelCircuitBreakerEnabled"] = strconv.FormatBool(common.CircuitBreakerEnabled)
 	common.OptionMap["ChannelCircuitBreakerFailureThreshold"] = strconv.Itoa(common.CircuitBreakerFailureThreshold)
 	common.OptionMap["ChannelCircuitBreakerCooldownSeconds"] = strconv.FormatInt(common.CircuitBreakerCooldownSeconds, 10)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
@@ -232,6 +232,9 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
+		return err
+	}
 	if key == operation_setting.ToolPriceOptionKey {
 		return operation_setting.ValidateToolPricesJSON(value)
 	}
@@ -400,7 +403,7 @@ func updateOptionMap(key string, value string) (err error) {
 		case "AutomaticDisableChannelEnabled":
 			common.AutomaticDisableChannelEnabled = boolValue
 		case "AutomaticEnableChannelEnabled":
-		common.AutomaticEnableChannelEnabled = boolValue
+			common.AutomaticEnableChannelEnabled = boolValue
 		case "ChannelCircuitBreakerEnabled":
 			common.ConfigureCircuitBreaker(boolValue, common.CircuitBreakerFailureThreshold, common.CircuitBreakerCooldownSeconds)
 		case "LogConsumeEnabled":
@@ -654,7 +657,8 @@ func updateOptionMap(key string, value string) (err error) {
 	case "AudioCompletionRatio":
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "TopUpLink":
-//case "ChatLink":
+		common.TopUpLink = value
+	//case "ChatLink":
 	//	common.ChatLink = value
 	//case "ChatLink2":
 	//	common.ChatLink2 = value
