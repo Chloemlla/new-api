@@ -818,6 +818,8 @@ export const STATIC_I18N_KEYS = [
   'Verify to enable user',
   'Verify to promote user',
   'Verify to demote user',
+  'Verify to approve user',
+  'Verify to reject user',
   // Model and vendor management labels.
   'Vendors',
   'Vendor management',

@@ -70,6 +70,8 @@ const MANAGE_ACTION_TITLES: Record<AdminUserManageAction, string> = {
   enable: 'Verify to enable user',
   promote: 'Verify to promote user',
   demote: 'Verify to demote user',
+  approve: 'Verify to approve user',
+  reject: 'Verify to reject user',
 }
 
 interface DataTableRowActionsProps {

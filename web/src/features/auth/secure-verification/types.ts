@@ -47,8 +47,19 @@ export type SecurityProofScope =
   | 'admin.user.2fa.disable'
   | 'admin.user.binding.clear'
 
-/** ManageUser actions that change a user's status or role and need step-up. */
-export type AdminUserManageAction = 'disable' | 'enable' | 'promote' | 'demote'
+/**
+ * ManageUser actions that change a user's status or role and need step-up.
+ * approve/reject are the fork's registration-approval actions: they flip a
+ * pending account to enabled (paying out the deferred starting quota) or to
+ * disabled, so they carry the same proof as the other status changes.
+ */
+export type AdminUserManageAction =
+  | 'disable'
+  | 'enable'
+  | 'promote'
+  | 'demote'
+  | 'approve'
+  | 'reject'
 
 export type VerificationOperation =
   | { scope: 'channel.key.read'; context: { channel_id: number } }
