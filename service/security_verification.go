@@ -50,7 +50,11 @@ const (
 
 // adminUserManageActions are the ManageUser actions that change a user's
 // status or role. Quota adjustments are not gated and deletion has its own scope.
-var adminUserManageActions = []string{"disable", "enable", "promote", "demote"}
+// The fork's registration approval adds approve/reject: they flip a pending
+// account to enabled (paying out the deferred starting quota) or to disabled, so
+// they carry the same step-up proof as the other status changes — the dashboard
+// requests one for every ManageUser action it offers.
+var adminUserManageActions = []string{"disable", "enable", "promote", "demote", "approve", "reject"}
 
 var (
 	ErrVerificationFailed         = errors.New("Verification failed. Please try again.")
