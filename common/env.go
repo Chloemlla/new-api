@@ -45,7 +45,7 @@ func GetEnvOrDefaultDuration(env string, defaultSeconds int) time.Duration {
 	}
 	seconds, err := strconv.Atoi(os.Getenv(env))
 	if err != nil {
-		SysError(fmt.Sprintf("failed to parse %s: %s, using default: %ds", env, err.Error(), defaultSeconds))
+		SysError(LogText("failed to parse %s: %s, using default: %ds", env, err.Error(), defaultSeconds))
 		return time.Duration(defaultSeconds) * time.Second
 	}
 	return time.Duration(seconds) * time.Second
