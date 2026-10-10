@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -16,6 +17,9 @@ import (
 
 func setupTokenIPWhitelistTest(t *testing.T, username string, affCode string) *model.User {
 	t.Helper()
+	// TokenAuth answers the IP whitelist rejection with an i18n.T message, so the
+	// bundle must be loaded the same way the other middleware tests load it.
+	require.NoError(t, i18n.Init())
 	previousDB := model.DB
 	previousType := common.MainDatabaseType()
 	previousRedis := common.RedisEnabled
