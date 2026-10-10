@@ -2,7 +2,6 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -103,7 +102,7 @@ func relayGoPoolPanic(ctx context.Context, i interface{}) {
 	if stopChan, ok := ctx.Value("stop_chan").(chan bool); ok {
 		SafeSendBool(stopChan, true)
 	}
-	SysError(fmt.Sprintf("panic in gopool.RelayPool: %v", i))
+	SysError(LogText("panic in gopool.RelayPool: %v", i))
 }
 
 // RelayCtxGo schedules f on the bounded relay goroutine pool. See
